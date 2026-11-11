@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Filla",
+  "version": "0.1.0",
+  "description": "Tailors your resume with your own Claude for each job, then autofills the application.",
+  "permissions": ["storage", "downloads", "sidePanel", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:8765/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://jobs.ashbyhq.com/*",
+    "https://jobs.smartrecruiters.com/*",
+    "https://careers.smartrecruiters.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Open Filla" },
+  "side_panel": { "default_path": "sidepanel/panel.html" },
+  "options_page": "options/options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://jobs.ashbyhq.com/*",
+        "https://jobs.smartrecruiters.com/*",
+        "https://careers.smartrecruiters.com/*"
+      ],
+      "js": ["content/adapters.js", "content/autofill.js", "content/detector.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

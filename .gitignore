@@ -1,0 +1,10 @@
+# personal data stays out of the repo
+server/resumes/*.tex
+server/resumes/rules.md
+server/runs/
+server/filla.db
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

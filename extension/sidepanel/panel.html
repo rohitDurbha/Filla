@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <header>
+    <span class="logo">Filla</span>
+    <span id="server-dot" title="Server status">●</span>
+  </header>
+
+  <!-- No supported site -->
+  <section id="view-nosite" class="view">
+    <p class="muted">Open a job posting on Greenhouse, Lever, Ashby, or
+    SmartRecruiters and Filla will pick it up here.</p>
+    <button id="recheck" class="ghost">Check this tab again</button>
+  </section>
+
+  <!-- Job detected -->
+  <section id="view-job" class="view hidden">
+    <div class="jobcard">
+      <div id="job-title" class="jobtitle"></div>
+      <div id="job-company" class="muted"></div>
+      <div id="job-ats" class="pill"></div>
+    </div>
+    <label class="field">Resume track
+      <select id="track"></select>
+    </label>
+    <p id="track-hint" class="muted small"></p>
+    <button id="apply" class="primary">Apply with Claude</button>
+  </section>
+
+  <!-- Tailoring in progress -->
+  <section id="view-busy" class="view hidden">
+    <div class="spinner"></div>
+    <p id="busy-text" class="muted center">Claude is tailoring your resume…</p>
+  </section>
+
+  <!-- Review extracted fields -->
+  <section id="view-review" class="view hidden">
+    <h2>Review what goes on the application</h2>
+    <p class="muted small">Edit anything that looks off. Edits are applied back
+    into the resume before the final PDF.</p>
+    <div id="fields-editor"></div>
+    <div class="btnrow">
+      <button id="review-approve" class="primary">Looks good</button>
+    </div>
+  </section>
+
+  <!-- Final PDF approval -->
+  <section id="view-pdf" class="view hidden">
+    <h2>Final resume</h2>
+    <iframe id="pdf-frame" title="Tailored resume PDF"></iframe>
+    <div class="btnrow">
+      <button id="pdf-back" class="ghost">Back to fields</button>
+      <button id="pdf-approve" class="primary">Approve, download, continue</button>
+    </div>
+  </section>
+
+  <!-- Fill the application -->
+  <section id="view-fill" class="view hidden">
+    <h2>Fill the application</h2>
+    <p class="muted small">Works per page. On multi-step applications, click
+    again after each step loads.</p>
+    <button id="fill" class="primary">Fill this page</button>
+    <div id="fill-summary" class="hidden">
+      <div id="fill-ok" class="oklist"></div>
+      <div id="fill-skip" class="skiplist"></div>
+    </div>
+    <div class="btnrow">
+      <button id="done" class="ghost">Mark applied, next job</button>
+    </div>
+  </section>
+
+  <footer>
+    <a href="#" id="open-options">One-time profile</a>
+    <span id="error" class="error"></span>
+  </footer>
+
+  <script src="panel.js"></script>
+</body>
+</html>

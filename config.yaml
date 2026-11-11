@@ -1,0 +1,43 @@
+# Filla configuration
+# Edit this file, then restart the server.
+
+server:
+  host: 127.0.0.1
+  port: 8765
+
+claude:
+  # The command used to reach your local Claude Code install.
+  command: claude
+  # "sonnet" always resolves to the latest Sonnet model. You can pin a full
+  # model id instead if you want a specific version.
+  model: sonnet
+  timeout_seconds: 420
+  # Extra CLI args appended to every call, for example a fallback model:
+  # extra_args: ["--fallback-model", "haiku"]
+  extra_args: []
+
+# Your four resume tracks. Drop the .tex files into server/resumes/ and make
+# sure the paths below match. The key (ds, da, ...) is what the extension
+# sends to the server.
+tracks:
+  ds:
+    name: Data Science
+    resume: resumes/data_science.tex
+  da:
+    name: Data Analytics
+    resume: resumes/data_analytics.tex
+  research:
+    name: Research
+    resume: resumes/research.tex
+  swe:
+    name: Software Engineering
+    resume: resumes/software_engineering.tex
+
+# Your written rules for how Claude may tailor a resume.
+rules_file: resumes/rules.md
+
+# Name used for the downloaded PDF. Recruiters see this filename.
+pdf_filename: Rohit_Durbha_Resume.pdf
+
+# Where tailored runs (tex, pdf, fields json) are stored.
+output_dir: runs
