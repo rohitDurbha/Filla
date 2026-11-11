@@ -18,13 +18,14 @@ import uuid
 from pathlib import Path
 
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import claude_client
 import db as dbmod
+import extract
 import latex
 
 ROOT = Path(__file__).resolve().parent.parent   # repo root
@@ -37,6 +38,7 @@ DB = dbmod.connect(SERVER / "filla.db")
 
 TAILOR_PROMPT = (SERVER / "prompts" / "tailor.md").read_text()
 REVISE_PROMPT = (SERVER / "prompts" / "revise.md").read_text()
+FIX_PROMPT = (SERVER / "prompts" / "fixtex.md").read_text()
 
 app = FastAPI(title="Filla server")
 app.add_middleware(
@@ -77,7 +79,8 @@ def _run_dir(app_id: str) -> Path:
     return d
 
 
-def _compile(app_id: str, tex: str, fields: dict, notes: str) -> dict:
+def _compile(app_id: str, tex: str, fields: dict, notes: str,
+             allow_repair: bool = True) -> dict:
     d = RUNS / app_id
     d.mkdir(exist_ok=True)
     tex_path = d / "resume.tex"
@@ -86,6 +89,18 @@ def _compile(app_id: str, tex: str, fields: dict, notes: str) -> dict:
     try:
         latex.compile_tex(tex_path, d)
     except latex.LatexError as e:
+        # One automatic repair round: hand the error back to Claude, which
+        # fixes most escaping and brace mistakes, then compile once more.
+        if allow_repair:
+            try:
+                fixed = claude_client.repair(
+                    FIX_PROMPT.format(error=str(e)[:4000], resume_tex=tex), CFG
+                )
+                return _compile(app_id, fixed, fields,
+                                notes + " Auto-repaired a LaTeX error.",
+                                allow_repair=False)
+            except claude_client.ClaudeError:
+                pass
         raise HTTPException(502, str(e))
     return {"app_id": app_id, "fields": fields, "notes": notes,
             "pdf_url": f"/pdf/{app_id}"}
@@ -146,6 +161,39 @@ def revise(req: ReviseRequest):
     except claude_client.ClaudeError as e:
         raise HTTPException(502, str(e))
     return _compile(req.app_id, result["tex"], result["fields"], result["notes"])
+
+
+@app.post("/upload")
+async def upload(resume: UploadFile = File(...), title: str = Form(""),
+                 company: str = Form(""), url: str = Form(""), ats: str = Form("")):
+    """Own-PDF path: the user already has a tailored PDF, no Claude involved."""
+    if not (resume.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "Please upload a PDF file.")
+    app_id = uuid.uuid4().hex[:12]
+    d = RUNS / app_id
+    d.mkdir(parents=True, exist_ok=True)
+    pdf_path = d / "resume.pdf"
+    pdf_path.write_bytes(await resume.read())
+    try:
+        fields = extract.extract_fields(pdf_path)
+    except Exception:
+        fields = {"personal": {}}
+    (d / "fields.json").write_text(json.dumps(fields, indent=2))
+    dbmod.log_application(
+        DB, app_id,
+        {"title": title, "company": company, "url": url, "ats": ats},
+        "own-pdf", pdf_path,
+    )
+    return {"app_id": app_id, "fields": fields, "pdf_url": f"/pdf/{app_id}",
+            "source": "pdf"}
+
+
+@app.post("/fields/{app_id}")
+def save_fields(app_id: str, fields: dict):
+    """Persist user edits for runs that have no LaTeX to revise (own-PDF)."""
+    d = _run_dir(app_id)
+    (d / "fields.json").write_text(json.dumps(fields, indent=2))
+    return {"ok": True}
 
 
 @app.get("/pdf/{app_id}")

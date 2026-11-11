@@ -13,7 +13,7 @@ so no API key is needed anywhere.
 
 1. Open a job posting on Greenhouse, Lever, Ashby, or SmartRecruiters. The
    side panel picks up the posting and suggests a resume track.
-2. Click Apply with Claude. The job description and the matching master
+2. Click Tailor with Claude. The job description and the matching master
    resume go to your local Claude, which returns a tailored .tex plus a
    structured JSON of every field in it. The server compiles the PDF with
    Tectonic.
@@ -24,6 +24,15 @@ so no API key is needed anywhere.
    standard fields, and answers the EEO questions from your one-time profile.
    On multi-step applications you click fill once per page.
 6. Mark applied. The application lands in a local SQLite log.
+
+Already have a tailored PDF? Drop it onto the panel (or click Use a PDF I
+already have) and Filla skips Claude entirely. Contact fields are extracted
+locally with simple heuristics, you fix anything they missed, and the fill
+step works exactly the same.
+
+When a tailored resume fails to compile, the server hands the compiler error
+back to Claude for one automatic repair round before giving up, and the panel
+shows the real error lines from the TeX log if it still fails.
 
 The structured JSON is the backbone of the design. Claude wrote the resume,
 so Claude already knows every field in it, which means no PDF parsing or

@@ -98,9 +98,25 @@ def parse_delimited(text: str) -> dict:
     return {"tex": tex, "fields": fields, "notes": notes}
 
 
+def parse_tex_only(text: str) -> str:
+    """Parse an answer that carries only a ===TEX=== section (repair calls)."""
+    m = re.search(
+        r"===TEX===\s*\n(.*?)(?=\n===(?:FIELDS|NOTES|END)===|\Z)", text, re.DOTALL
+    )
+    if not m or not m.group(1).strip():
+        raise ClaudeError(
+            f"Claude's repair answer was missing the TEX section. Started with: {text[:300]}"
+        )
+    return m.group(1).strip()
+
+
 def tailor(prompt: str, cfg: dict) -> dict:
     return parse_delimited(run_claude(prompt, cfg))
 
 
 def revise(prompt: str, cfg: dict) -> dict:
     return parse_delimited(run_claude(prompt, cfg))
+
+
+def repair(prompt: str, cfg: dict) -> str:
+    return parse_tex_only(run_claude(prompt, cfg))

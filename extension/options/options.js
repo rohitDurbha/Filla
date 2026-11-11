@@ -19,8 +19,8 @@ document.getElementById("save").addEventListener("click", async () => {
   }
   await chrome.storage.local.set({ eeoProfile });
   const saved = document.getElementById("saved");
-  saved.textContent = "Saved";
-  setTimeout(() => (saved.textContent = ""), 2000);
+  saved.classList.add("on");
+  setTimeout(() => saved.classList.remove("on"), 2200);
 });
 
 load();

@@ -5,77 +5,110 @@
   <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
+  <div class="glow" aria-hidden="true"></div>
+
   <header>
     <span class="logo">Filla</span>
-    <span id="server-dot" title="Server status">●</span>
+    <span id="server-dot" title="Checking the local server"><span class="dot"></span><span id="server-label">server</span></span>
   </header>
 
-  <!-- No supported site -->
-  <section id="view-nosite" class="view">
-    <p class="muted">Open a job posting on Greenhouse, Lever, Ashby, or
-    SmartRecruiters and Filla will pick it up here.</p>
-    <button id="recheck" class="ghost">Check this tab again</button>
-  </section>
+  <nav class="stages" aria-label="Application progress">
+    <div class="track"><div id="track-fill"></div></div>
+    <ol id="stage-list">
+      <li data-stage="0"><i></i><span>Job</span></li>
+      <li data-stage="1"><i></i><span id="stage-resume-label">Resume</span></li>
+      <li data-stage="2"><i></i><span>Review</span></li>
+      <li data-stage="3"><i></i><span>Final</span></li>
+      <li data-stage="4"><i></i><span>Fill</span></li>
+    </ol>
+  </nav>
 
-  <!-- Job detected -->
-  <section id="view-job" class="view hidden">
-    <div class="jobcard">
-      <div id="job-title" class="jobtitle"></div>
-      <div id="job-company" class="muted"></div>
-      <div id="job-ats" class="pill"></div>
-    </div>
-    <label class="field">Resume track
-      <select id="track"></select>
-    </label>
-    <p id="track-hint" class="muted small"></p>
-    <button id="apply" class="primary">Apply with Claude</button>
-  </section>
+  <main>
+    <!-- No supported site -->
+    <section id="view-nosite" class="view">
+      <div class="empty">
+        <div class="empty-mark">⌖</div>
+        <p>Open a job posting on Greenhouse, Lever, Ashby, or SmartRecruiters
+        and it will appear here.</p>
+        <button id="recheck" class="ghost">Check this tab again</button>
+      </div>
+    </section>
 
-  <!-- Tailoring in progress -->
-  <section id="view-busy" class="view hidden">
-    <div class="spinner"></div>
-    <p id="busy-text" class="muted center">Claude is tailoring your resume…</p>
-  </section>
+    <!-- Job detected -->
+    <section id="view-job" class="view hidden">
+      <div class="jobcard">
+        <div id="job-title" class="jobtitle"></div>
+        <div id="job-company" class="muted"></div>
+        <span id="job-ats" class="pill"></span>
+      </div>
+      <label class="field">Resume track
+        <select id="track"></select>
+      </label>
+      <p id="track-hint" class="muted small"></p>
+      <button id="apply" class="primary">Tailor with Claude</button>
+      <button id="upload-btn" class="ghost wide">Use a PDF I already have</button>
+      <input type="file" id="upload-input" accept="application/pdf" hidden />
+      <p class="muted small center" id="drop-hint">You can also drop a PDF anywhere on this panel.</p>
+    </section>
 
-  <!-- Review extracted fields -->
-  <section id="view-review" class="view hidden">
-    <h2>Review what goes on the application</h2>
-    <p class="muted small">Edit anything that looks off. Edits are applied back
-    into the resume before the final PDF.</p>
-    <div id="fields-editor"></div>
-    <div class="btnrow">
-      <button id="review-approve" class="primary">Looks good</button>
-    </div>
-  </section>
+    <!-- Working -->
+    <section id="view-busy" class="view hidden">
+      <div class="paper">
+        <div class="sk w40"></div>
+        <div class="sk w90"></div>
+        <div class="sk w80"></div>
+        <div class="sk w85"></div>
+        <div class="sk w30 gap"></div>
+        <div class="sk w95"></div>
+        <div class="sk w75"></div>
+        <div class="sk w88"></div>
+      </div>
+      <p id="busy-text" class="muted center">Claude is tailoring your resume…</p>
+    </section>
 
-  <!-- Final PDF approval -->
-  <section id="view-pdf" class="view hidden">
-    <h2>Final resume</h2>
-    <iframe id="pdf-frame" title="Tailored resume PDF"></iframe>
-    <div class="btnrow">
-      <button id="pdf-back" class="ghost">Back to fields</button>
-      <button id="pdf-approve" class="primary">Approve, download, continue</button>
-    </div>
-  </section>
+    <!-- Review extracted fields -->
+    <section id="view-review" class="view hidden">
+      <h2>Check what goes on the application</h2>
+      <p id="review-note" class="muted small"></p>
+      <div id="fields-editor"></div>
+      <button id="review-approve" class="primary">Looks right, continue</button>
+    </section>
 
-  <!-- Fill the application -->
-  <section id="view-fill" class="view hidden">
-    <h2>Fill the application</h2>
-    <p class="muted small">Works per page. On multi-step applications, click
-    again after each step loads.</p>
-    <button id="fill" class="primary">Fill this page</button>
-    <div id="fill-summary" class="hidden">
-      <div id="fill-ok" class="oklist"></div>
-      <div id="fill-skip" class="skiplist"></div>
+    <!-- Final PDF approval -->
+    <section id="view-pdf" class="view hidden">
+      <h2>Final resume</h2>
+      <iframe id="pdf-frame" title="Resume PDF"></iframe>
+      <div class="btnrow">
+        <button id="pdf-back" class="ghost">Edit fields</button>
+        <button id="pdf-approve" class="primary">Approve and continue</button>
+      </div>
+    </section>
+
+    <!-- Fill the application -->
+    <section id="view-fill" class="view hidden">
+      <h2>Fill the application</h2>
+      <p class="muted small">Fills one page at a time. On multi-step
+      applications, click again after each step loads.</p>
+      <button id="fill" class="primary">Fill this page</button>
+      <div id="fill-summary" class="hidden">
+        <div id="fill-ok" class="oklist"></div>
+        <div id="fill-skip" class="skiplist"></div>
+      </div>
+      <button id="done" class="ghost wide">Mark applied, next job</button>
+    </section>
+  </main>
+
+  <div id="error-box" class="hidden">
+    <div class="error-head">
+      <span>Something broke</span>
+      <button id="error-close" class="linkish">Dismiss</button>
     </div>
-    <div class="btnrow">
-      <button id="done" class="ghost">Mark applied, next job</button>
-    </div>
-  </section>
+    <pre id="error-text"></pre>
+  </div>
 
   <footer>
     <a href="#" id="open-options">One-time profile</a>
-    <span id="error" class="error"></span>
+    <span class="muted small">v0.2</span>
   </footer>
 
   <script src="panel.js"></script>

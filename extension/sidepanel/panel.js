@@ -1,30 +1,45 @@
 // Filla side panel state machine.
-// idle -> job -> busy -> review -> pdf -> fill -> done
+// job -> (tailor with Claude | use own PDF) -> review -> final PDF -> fill
 
 const SERVER = "http://127.0.0.1:8765";
 
 const state = {
-  tab: null,          // active tab id
-  job: null,          // scraped job info
-  tracks: {},         // from server /health
+  tab: null,
+  job: null,
+  tracks: {},
   pdfFilename: "resume.pdf",
   appId: null,
   fields: null,
-  dirty: false,       // user edited fields since last compile
+  dirty: false,
+  source: null, // "claude" | "pdf"
 };
 
 const $ = (id) => document.getElementById(id);
 const views = ["nosite", "job", "busy", "review", "pdf", "fill"];
+const VIEW_STAGE = { nosite: 0, job: 0, busy: 1, review: 2, pdf: 3, fill: 4 };
+
+function setStage(n) {
+  document.querySelectorAll("#stage-list li").forEach((li) => {
+    const s = Number(li.dataset.stage);
+    li.classList.toggle("done", s < n);
+    li.classList.toggle("active", s === n);
+  });
+  $("track-fill").style.width = (n / 4) * 100 + "%";
+}
 
 function show(view) {
   for (const v of views) $("view-" + v).classList.toggle("hidden", v !== view);
-  $("error").textContent = "";
+  setStage(VIEW_STAGE[view]);
+  hideError();
 }
 
 function fail(msg) {
   console.error(msg);
-  $("error").textContent = String(msg).slice(0, 160);
+  $("error-text").textContent = String(msg).slice(0, 4000);
+  $("error-box").classList.remove("hidden");
 }
+function hideError() { $("error-box").classList.add("hidden"); }
+$("error-close").addEventListener("click", hideError);
 
 async function api(path, body) {
   const resp = await fetch(SERVER + path, body ? {
@@ -46,19 +61,20 @@ async function checkServer() {
   try {
     const h = await api("/health");
     $("server-dot").classList.add("ok");
-    $("server-dot").title = h.tectonic ? "Server online" : "Server online, but Tectonic is missing";
+    $("server-label").textContent = h.tectonic ? "ready" : "no tectonic";
     state.tracks = h.tracks;
     state.pdfFilename = h.pdf_filename;
     const sel = $("track");
-    sel.innerHTML = "";
-    for (const [key, name] of Object.entries(h.tracks)) {
-      const o = document.createElement("option");
-      o.value = key; o.textContent = name;
-      sel.appendChild(o);
+    if (!sel.options.length) {
+      for (const [key, name] of Object.entries(h.tracks)) {
+        const o = document.createElement("option");
+        o.value = key; o.textContent = name;
+        sel.appendChild(o);
+      }
     }
   } catch {
     $("server-dot").classList.remove("ok");
-    $("server-dot").title = "Filla server is not running (python server/app.py)";
+    $("server-label").textContent = "offline";
   }
 }
 
@@ -101,30 +117,90 @@ async function detectJob() {
       : "Could not infer the track from the posting, pick one.";
     show("job");
   } catch {
-    show("nosite"); // content script not present on this page
+    show("nosite");
   }
 }
 
-// ---------- tailoring ----------
+// ---------- path one: tailor with Claude ----------
 
 $("apply").addEventListener("click", async () => {
+  state.source = "claude";
+  $("stage-resume-label").textContent = "Resume";
   show("busy");
-  $("busy-text").textContent = "Claude is reading the posting and tailoring your resume… this usually takes a minute.";
+  $("busy-text").textContent =
+    "Claude is reading the posting and tailoring your resume. This usually takes a minute.";
   try {
-    const out = await api("/tailor", { job: {
-      title: state.job.title, company: state.job.company,
-      url: state.job.url, ats: state.job.ats,
-      description: state.job.description,
-    }, track: $("track").value });
-    state.appId = out.app_id;
-    state.fields = out.fields;
-    state.dirty = false;
-    renderEditor(out.fields);
-    show("review");
+    const out = await api("/tailor", {
+      job: {
+        title: state.job.title, company: state.job.company,
+        url: state.job.url, ats: state.job.ats,
+        description: state.job.description,
+      },
+      track: $("track").value,
+    });
+    enterReview(out);
   } catch (e) { show("job"); fail(e); }
 });
 
-// ---------- fields editor ----------
+// ---------- path two: use an existing PDF ----------
+
+$("upload-btn").addEventListener("click", () => $("upload-input").click());
+$("upload-input").addEventListener("change", (e) => {
+  if (e.target.files?.[0]) handlePdf(e.target.files[0]);
+  e.target.value = "";
+});
+
+document.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  if (!$("view-job").classList.contains("hidden")) document.body.classList.add("dropping");
+});
+document.addEventListener("dragleave", (e) => {
+  if (!e.relatedTarget) document.body.classList.remove("dropping");
+});
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  document.body.classList.remove("dropping");
+  const file = e.dataTransfer?.files?.[0];
+  if (file && file.type === "application/pdf" &&
+      !$("view-job").classList.contains("hidden")) {
+    handlePdf(file);
+  }
+});
+
+async function handlePdf(file) {
+  state.source = "pdf";
+  $("stage-resume-label").textContent = "PDF";
+  show("busy");
+  $("busy-text").textContent = "Reading your PDF…";
+  try {
+    const form = new FormData();
+    form.append("resume", file, file.name);
+    form.append("title", state.job?.title || "");
+    form.append("company", state.job?.company || "");
+    form.append("url", state.job?.url || "");
+    form.append("ats", state.job?.ats || "");
+    const resp = await fetch(SERVER + "/upload", { method: "POST", body: form });
+    if (!resp.ok) {
+      let detail = resp.statusText;
+      try { detail = (await resp.json()).detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    enterReview(await resp.json());
+  } catch (e) { show("job"); fail(e); }
+}
+
+// ---------- review ----------
+
+function enterReview(out) {
+  state.appId = out.app_id;
+  state.fields = out.fields;
+  state.dirty = false;
+  $("review-note").textContent = state.source === "pdf"
+    ? "Extracted from your PDF without any AI. Fix anything it missed, then continue."
+    : "Everything below comes from the tailored resume. Edits are written back into the LaTeX before the final PDF.";
+  renderEditor(out.fields);
+  show("review");
+}
 
 function inp(label, value, onchange, textarea = false) {
   const wrap = document.createElement("label");
@@ -170,23 +246,24 @@ function renderEditor(f) {
   pb.appendChild(inp("GitHub", P.github, (v) => (P.github = v)));
   root.appendChild(pd);
 
-  if (f.summary !== undefined) {
+  if (f.summary !== undefined && state.source === "claude") {
     const [sd, sb] = section("Summary");
     sb.appendChild(inp("Summary", f.summary, (v) => (f.summary = v), true));
     root.appendChild(sd);
   }
 
   const lists = [
-    ["Work experience", f.work_experience, (e) => `${e.role || "?"} @ ${e.company || "?"}`,
+    ["Work experience", f.work_experience, (e) => `${e.role || "?"} at ${e.company || "?"}`,
       (b, e) => {
         b.appendChild(inp("Role", e.role, (v) => (e.role = v)));
         b.appendChild(inp("Company", e.company, (v) => (e.company = v)));
         b.appendChild(inp("Dates", [e.start, e.end].filter(Boolean).join(" to "), (v) => {
-          const [s2, e2] = v.split(/\s+to\s+|–|—/); e.start = (s2 || "").trim(); e.end = (e2 || "").trim();
+          const [s2, e2] = v.split(/\s+to\s+|–|—/);
+          e.start = (s2 || "").trim(); e.end = (e2 || "").trim();
         }));
         bulletsArea(b, e);
       }],
-    ["Research experience", f.research_experience, (e) => `${e.role || "?"} @ ${e.org || "?"}`,
+    ["Research experience", f.research_experience, (e) => `${e.role || "?"} at ${e.org || "?"}`,
       (b, e) => {
         b.appendChild(inp("Role", e.role, (v) => (e.role = v)));
         b.appendChild(inp("Organization", e.org, (v) => (e.org = v)));
@@ -212,7 +289,7 @@ function renderEditor(f) {
       const box = document.createElement("div");
       box.className = "entry";
       const h = document.createElement("div");
-      h.style.fontWeight = "600";
+      h.className = "entry-head";
       h.textContent = head(e);
       box.appendChild(h);
       build(box, e);
@@ -232,7 +309,10 @@ function renderEditor(f) {
 }
 
 $("review-approve").addEventListener("click", async () => {
-  if (state.dirty) {
+  if (state.source === "pdf") {
+    // No LaTeX to rebuild; just persist the edits for the autofill step.
+    try { await api(`/fields/${state.appId}`, state.fields); } catch (e) { return fail(e); }
+  } else if (state.dirty) {
     show("busy");
     $("busy-text").textContent = "Applying your edits to the resume…";
     try {
@@ -242,6 +322,9 @@ $("review-approve").addEventListener("click", async () => {
     } catch (e) { show("review"); return fail(e); }
   }
   $("pdf-frame").src = `${SERVER}/pdf/${state.appId}#toolbar=0&t=${Date.now()}`;
+  $("pdf-approve").textContent = state.source === "pdf"
+    ? "Approve and continue"
+    : "Approve, download, continue";
   show("pdf");
 });
 
@@ -250,13 +333,15 @@ $("review-approve").addEventListener("click", async () => {
 $("pdf-back").addEventListener("click", () => { renderEditor(state.fields); show("review"); });
 
 $("pdf-approve").addEventListener("click", async () => {
-  try {
-    await chrome.downloads.download({
-      url: `${SERVER}/pdf/${state.appId}`,
-      filename: state.pdfFilename,
-      conflictAction: "uniquify",
-    });
-  } catch (e) { fail(e); }
+  if (state.source === "claude") {
+    try {
+      await chrome.downloads.download({
+        url: `${SERVER}/pdf/${state.appId}`,
+        filename: state.pdfFilename,
+        conflictAction: "uniquify",
+      });
+    } catch (e) { fail(e); }
+  }
   show("fill");
   $("fill-summary").classList.add("hidden");
 });
@@ -279,13 +364,17 @@ $("fill").addEventListener("click", async () => {
     if (!res?.ok) throw new Error(res?.error || "Fill failed");
     const okBox = $("fill-ok"), skipBox = $("fill-skip");
     okBox.innerHTML = ""; skipBox.innerHTML = "";
-    res.filled.forEach((x) => { const d = document.createElement("div"); d.textContent = x; okBox.appendChild(d); });
+    res.filled.forEach((x) => {
+      const d = document.createElement("div"); d.textContent = x; okBox.appendChild(d);
+    });
     if (res.skipped.length) {
       const h = document.createElement("div");
       h.className = "head";
-      h.textContent = "Needs you:";
+      h.textContent = "Still needs you";
       skipBox.appendChild(h);
-      res.skipped.slice(0, 15).forEach((x) => { const d = document.createElement("div"); d.textContent = x; skipBox.appendChild(d); });
+      res.skipped.slice(0, 15).forEach((x) => {
+        const d = document.createElement("div"); d.textContent = x; skipBox.appendChild(d);
+      });
     }
     $("fill-summary").classList.remove("hidden");
   } catch (e) { fail(e); }
@@ -294,14 +383,17 @@ $("fill").addEventListener("click", async () => {
 
 $("done").addEventListener("click", async () => {
   try { await api("/status", { app_id: state.appId, status: "applied" }); } catch {}
-  state.appId = null; state.fields = null;
+  state.appId = null; state.fields = null; state.source = null;
+  $("stage-resume-label").textContent = "Resume";
   detectJob();
 });
 
 // ---------- misc ----------
 
 $("recheck").addEventListener("click", detectJob);
-$("open-options").addEventListener("click", (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
+$("open-options").addEventListener("click", (e) => {
+  e.preventDefault(); chrome.runtime.openOptionsPage();
+});
 chrome.tabs.onActivated.addListener(() => { if (!state.appId) detectJob(); });
 
 checkServer().then(detectJob);
