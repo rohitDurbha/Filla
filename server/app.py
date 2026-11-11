@@ -34,7 +34,8 @@ SERVER = Path(__file__).resolve().parent
 CFG = yaml.safe_load((ROOT / "config.yaml").read_text())
 RUNS = SERVER / CFG.get("output_dir", "runs")
 RUNS.mkdir(exist_ok=True)
-DB = dbmod.connect(SERVER / "filla.db")
+DB_PATH = SERVER / "filla.db"
+dbmod.init(DB_PATH)
 
 TAILOR_PROMPT = (SERVER / "prompts" / "tailor.md").read_text()
 REVISE_PROMPT = (SERVER / "prompts" / "revise.md").read_text()
@@ -144,7 +145,7 @@ def tailor(req: TailorRequest):
 
     app_id = uuid.uuid4().hex[:12]
     out = _compile(app_id, result["tex"], result["fields"], result["notes"])
-    dbmod.log_application(DB, app_id, req.job.model_dump(), req.track,
+    dbmod.log_application(DB_PATH, app_id, req.job.model_dump(), req.track,
                           RUNS / app_id / "resume.pdf")
     return out
 
@@ -180,7 +181,7 @@ async def upload(resume: UploadFile = File(...), title: str = Form(""),
         fields = {"personal": {}}
     (d / "fields.json").write_text(json.dumps(fields, indent=2))
     dbmod.log_application(
-        DB, app_id,
+        DB_PATH, app_id,
         {"title": title, "company": company, "url": url, "ats": ats},
         "own-pdf", pdf_path,
     )
@@ -214,13 +215,13 @@ def fields(app_id: str):
 
 @app.post("/status")
 def status(req: StatusRequest):
-    dbmod.set_status(DB, req.app_id, req.status)
+    dbmod.set_status(DB_PATH, req.app_id, req.status)
     return {"ok": True}
 
 
 @app.get("/applications")
 def applications():
-    return dbmod.list_applications(DB)
+    return dbmod.list_applications(DB_PATH)
 
 
 if __name__ == "__main__":

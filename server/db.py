@@ -1,8 +1,14 @@
-"""SQLite log of every application Filla helps submit."""
+"""SQLite log of every application Filla helps submit.
+
+Connections are opened per operation because FastAPI runs sync endpoints in
+a thread pool and SQLite connections cannot be shared across threads.
+Opening a connection is cheap at this scale.
+"""
 
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 SCHEMA = """
@@ -20,30 +26,41 @@ CREATE TABLE IF NOT EXISTS applications (
 """
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
+@contextmanager
+def _conn(db_path: Path):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    conn.execute(SCHEMA)
-    return conn
+    try:
+        conn.execute(SCHEMA)
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
 
 
-def log_application(conn, app_id, job, track, pdf_path):
-    conn.execute(
-        """INSERT OR REPLACE INTO applications (id, company, title, url, ats, track, pdf_path)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (app_id, job.get("company"), job.get("title"), job.get("url"),
-         job.get("ats"), track, str(pdf_path)),
-    )
-    conn.commit()
+def init(db_path: Path) -> None:
+    with _conn(db_path):
+        pass
 
 
-def set_status(conn, app_id, status):
-    conn.execute("UPDATE applications SET status = ? WHERE id = ?", (status, app_id))
-    conn.commit()
+def log_application(db_path: Path, app_id, job, track, pdf_path):
+    with _conn(db_path) as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO applications (id, company, title, url, ats, track, pdf_path)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (app_id, job.get("company"), job.get("title"), job.get("url"),
+             job.get("ats"), track, str(pdf_path)),
+        )
 
 
-def list_applications(conn, limit=200):
-    rows = conn.execute(
-        "SELECT * FROM applications ORDER BY created_at DESC LIMIT ?", (limit,)
-    ).fetchall()
-    return [dict(r) for r in rows]
+def set_status(db_path: Path, app_id, status):
+    with _conn(db_path) as conn:
+        conn.execute("UPDATE applications SET status = ? WHERE id = ?", (status, app_id))
+
+
+def list_applications(db_path: Path, limit=200):
+    with _conn(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM applications ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
