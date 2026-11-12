@@ -26,6 +26,12 @@
   font-display: swap;
 }
 @font-face {
+  font-family: "Geist Serif Triangle";
+  src: url("../fonts/GeistSerif-Triangle.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
   font-family: "Geist Mono";
   src: url("../fonts/GeistMono-Variable.woff2") format("woff2");
   font-weight: 100 900;
@@ -45,7 +51,10 @@ header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px 10px;
 }
-.logo { font-size: 18px; font-weight: 800; letter-spacing: -0.4px; }
+.logo {
+  font-family: "Geist Serif Triangle", "Geist Serif", Georgia, serif;
+  font-size: 19px; font-weight: 700; letter-spacing: -0.2px;
+}
 .logo-dot {
   display: inline-block; width: 7px; height: 7px; margin-left: 3px;
   border-radius: 50%; background: var(--accent); vertical-align: 2px;

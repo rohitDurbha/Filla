@@ -21,7 +21,7 @@
   fontFace.textContent = `
     @font-face {
       font-family: "Filla Geist Serif";
-      src: url("${chrome.runtime.getURL("fonts/GeistSerifVF.woff2")}") format("woff2");
+      src: url("${chrome.runtime.getURL("fonts/GeistSerif-Triangle.woff2")}") format("woff2");
       font-weight: 400;
       font-display: swap;
     }`;
