@@ -47,7 +47,7 @@
       </label>
       <p id="track-hint" class="muted small"></p>
       <button id="apply" class="primary">Tailor with Claude</button>
-      <button id="upload-btn" class="ghost wide">Use a PDF I already have</button>
+      <button id="upload-btn" class="ghost wide">Use an existing PDF</button>
       <input type="file" id="upload-input" accept="application/pdf" hidden />
       <p class="muted small center" id="drop-hint">You can also drop a PDF anywhere on this panel.</p>
     </section>
@@ -76,8 +76,8 @@
       </div>
       <p id="review-note" class="muted small"></p>
       <details id="claude-notes" class="notes hidden">
-        <summary>What Claude changed</summary>
-        <p id="claude-notes-text"></p>
+        <summary><span>What Claude changed</span><span id="notes-score" class="score"></span></summary>
+        <ul id="claude-notes-list"></ul>
       </details>
       <div id="fields-editor"></div>
       <button id="review-approve" class="primary">Looks right, continue</button>

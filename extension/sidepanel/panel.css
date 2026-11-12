@@ -206,11 +206,17 @@ body.dropping::after {
 .notes summary {
   cursor: pointer; padding: 9px 12px; font-weight: 650; color: var(--accent-ink);
   list-style: none; user-select: none;
+  display: flex; align-items: center; gap: 10px;
 }
 .notes summary::-webkit-details-marker { display: none; }
-.notes summary::after { content: "+"; float: right; color: var(--muted); }
+.notes summary::after { content: "+"; color: var(--muted); margin-left: 2px; }
 .notes[open] summary::after { content: "–"; }
-.notes p { margin: 0; padding: 0 12px 10px; color: var(--muted); white-space: pre-wrap; }
+.notes .score { margin-left: auto; font-weight: 750; font-size: 14px; color: var(--muted); }
+.notes .score .to { color: var(--accent-ink); font-size: 17px; }
+.notes .score .arrow { color: var(--muted); font-size: 12px; }
+.notes ul { margin: 0; padding: 0 14px 12px 28px; color: var(--muted); }
+.notes li { margin: 3px 0 7px; }
+.notes li::marker { color: var(--accent); }
 
 /* ---- fields editor ---- */
 details.sec {

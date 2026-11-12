@@ -219,9 +219,23 @@ const FillaFill = (() => {
 
   // ---------- verified interactions ----------
 
+  // A full pointer sequence: React forms sometimes listen below click().
+  function fireClick(el) {
+    const opts = { bubbles: true, cancelable: true, view: window };
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+      try {
+        el.dispatchEvent(type.startsWith("pointer")
+          ? new PointerEvent(type, opts)
+          : new MouseEvent(type, opts));
+      } catch {}
+    }
+  }
+
   // Radios are usually hidden inputs behind styled labels; React apps listen
-  // on the label. Click the visible thing, then verify the checked flag.
-  function clickRadio(input) {
+  // on the label. Click the visible thing, then verify AFTER a beat: a
+  // controlled React radio can flip checked natively and get reverted on
+  // the next render, so an instant check reports false success.
+  async function clickRadio(input) {
     const targets = [];
     if (input.id) {
       const l = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
@@ -232,7 +246,8 @@ const FillaFill = (() => {
     targets.push(input);
     for (const t of targets) {
       flash(visible(t) ? t : input.closest("fieldset") || t);
-      try { t.click(); } catch {}
+      fireClick(t);
+      await sleep(120);
       if (input.checked) return true;
     }
     // Last resort: set the flag natively and announce it.
@@ -242,6 +257,7 @@ const FillaFill = (() => {
       input.dispatchEvent(new Event("click", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     } catch {}
+    await sleep(120);
     return input.checked;
   }
 
@@ -411,10 +427,12 @@ const FillaFill = (() => {
     for (const group of Object.values(groups)) {
       const g0 = group[0];
       const rg = g0.closest('[role="radiogroup"],fieldset');
+      // Underscores are word characters, so field names like
+      // "systemfield_eeoc_race" defeat \b patterns unless split apart.
       const groupText = norm(
-        rg?.querySelector("legend")?.textContent ||
-        rg?.getAttribute("aria-label") ||
-        g0.name || ""
+        (rg?.querySelector("legend")?.textContent ||
+         rg?.getAttribute("aria-label") ||
+         g0.name || "").replace(/[\[\]_-]+/g, " ")
       );
       const rule = rules.find((r) => r.eeo && r.re.test(groupText));
       if (!rule || satisfied.has(rule.eeo)) continue;
@@ -429,7 +447,7 @@ const FillaFill = (() => {
         if (hit) break;
       }
       if (!hit) { report(name, "skipped"); continue; }
-      const ok = clickRadio(hit.el);
+      const ok = await clickRadio(hit.el);
       satisfied.add(rule.eeo);
       report(name, ok ? "filled" : "check");
       await sleep(PACE);
@@ -456,7 +474,8 @@ const FillaFill = (() => {
           const hit = btns.find((b) => b.textContent.trim().toLowerCase() === answer);
           if (hit) {
             flash(hit);
-            hit.click();
+            fireClick(hit);
+            await sleep(150);
             const verified =
               hit.getAttribute("aria-checked") === "true" ||
               hit.getAttribute("aria-pressed") === "true" ||

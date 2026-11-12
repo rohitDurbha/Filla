@@ -1,7 +1,9 @@
 // Filla panel state machine.
 // job -> (tailor with Claude | use own PDF) -> review -> final PDF -> fill
 
-const SERVER = "http://127.0.0.1:8765";
+// localhost, not 127.0.0.1: Chrome exempts the localhost name from mixed
+// content checks but flags bare IP literals, which spammed the errors page.
+const SERVER = "http://localhost:8765";
 
 const state = {
   job: null,
@@ -29,7 +31,10 @@ function setStage(n) {
   $("track-fill").style.width = (n / 4) * 100 + "%";
 }
 
+let currentView = "nosite";
+
 function show(view) {
+  currentView = view;
   for (const v of views) $("view-" + v).classList.toggle("hidden", v !== view);
   setStage(VIEW_STAGE[view]);
   hideError();
@@ -66,7 +71,7 @@ async function getTab() {
 }
 
 const CONTENT_FILES = ["content/adapters.js", "content/autofill.js", "content/detector.js"];
-const CONTENT_VERSION = 2;
+const CONTENT_VERSION = 3;
 
 // Self-heal: after an extension reload, pages keep orphaned or outdated
 // content scripts. On a dead connection or an old version, inject the
@@ -195,6 +200,16 @@ $("apply").addEventListener("click", async () => {
       track: $("track").value,
       cancel_id: state.cancelId,
     }, signal);
+    if (document.hidden) {
+      try {
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+          title: "Resume ready",
+          message: `Your tailored resume for ${state.job.company || "this job"} is ready to review.`,
+        });
+      } catch {}
+    }
     enterReview(out);
   } catch (e) {
     if (e.name === "AbortError") return;
@@ -262,7 +277,7 @@ function enterReview(out) {
     : "Everything below comes from the tailored resume. Edits are written back into the LaTeX before the final PDF.";
   const notes = $("claude-notes");
   if (state.source === "claude" && out.notes) {
-    $("claude-notes-text").textContent = out.notes;
+    renderNotes(out.notes);
     notes.classList.remove("hidden");
     notes.open = false;
   } else {
@@ -270,6 +285,36 @@ function enterReview(out) {
   }
   renderEditor(out.fields);
   show("review");
+}
+
+function renderNotes(text) {
+  const scoreBox = $("notes-score");
+  const list = $("claude-notes-list");
+  scoreBox.innerHTML = "";
+  list.innerHTML = "";
+
+  const m = text.match(/\b(\d{1,3})\s*(?:to|→|->)\s*(\d{1,3})\b/);
+  if (m) {
+    const from = document.createElement("span");
+    from.className = "from";
+    from.textContent = m[1];
+    const arrow = document.createElement("span");
+    arrow.className = "arrow";
+    arrow.textContent = " → ";
+    const to = document.createElement("span");
+    to.className = "to";
+    to.textContent = m[2];
+    scoreBox.append(from, arrow, to);
+  }
+
+  text.split("\n")
+    .map((l) => l.replace(/^[-•·*]\s*/, "").replace(/^Score\s+\d+\s*(?:to|→|->)\s*\d+[.,]?\s*/i, "").trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const li = document.createElement("li");
+      li.textContent = line;
+      list.appendChild(li);
+    });
 }
 
 $("review-restart").addEventListener("click", resetFlow);
@@ -587,7 +632,11 @@ $("recheck").addEventListener("click", detectJob);
 $("open-options").addEventListener("click", (e) => {
   e.preventDefault(); chrome.runtime.openOptionsPage();
 });
-chrome.tabs.onActivated.addListener(() => { if (!state.appId) detectJob(); });
+// Re-detect on tab switches only when the flow is idle. Mid-flow views
+// (tailoring, review, final, fill) must survive the user tabbing away.
+chrome.tabs.onActivated.addListener(() => {
+  if (currentView === "nosite" || currentView === "job") detectJob();
+});
 
 checkServer().then(detectJob);
 setInterval(checkServer, 30000);
