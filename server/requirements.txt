@@ -4,3 +4,4 @@ pyyaml>=6.0
 pypdf>=4.0
 python-multipart>=0.0.9
 pypdfium2>=4.30
+pillow>=10.0
