@@ -51,10 +51,12 @@ header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px 10px;
 }
+.brand { display: flex; flex-direction: column; line-height: 1.15; }
 .logo {
   font-family: "Geist Serif Triangle", "Geist Serif", Georgia, serif;
   font-size: 19px; font-weight: 700; letter-spacing: -0.2px;
 }
+.ver { font-size: 9.5px; color: var(--muted); letter-spacing: 0.3px; }
 .logo-dot {
   display: inline-block; width: 7px; height: 7px; margin-left: 3px;
   border-radius: 50%; background: var(--accent); vertical-align: 2px;
@@ -210,6 +212,21 @@ body.dropping::after {
   margin: 4px 0 12px; font-size: 12px; line-height: 1.6;
   background: var(--card); border: 1px solid var(--line);
   border-radius: 10px;
+  interpolate-size: allow-keywords;
+}
+/* Smooth open and close for every disclosure (Chrome's modern details
+   animation: the content pseudo-element transitions from 0 to auto). */
+.notes::details-content, details.sec::details-content {
+  opacity: 0; block-size: 0; overflow: hidden;
+  transition: block-size 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.22s ease,
+              content-visibility 0.3s allow-discrete;
+}
+.notes[open]::details-content, details.sec[open]::details-content {
+  opacity: 1; block-size: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes::details-content, details.sec::details-content { transition: none; }
 }
 .notes summary {
   cursor: pointer; padding: 9px 12px; font-weight: 650; color: var(--accent-ink);
@@ -219,7 +236,12 @@ body.dropping::after {
 .notes summary::-webkit-details-marker { display: none; }
 .notes summary::after { content: "+"; color: var(--muted); margin-left: 2px; }
 .notes[open] summary::after { content: "–"; }
-.notes .score { margin-left: auto; font-weight: 750; font-size: 14px; color: var(--muted); }
+.notes .score {
+  margin-left: auto; display: flex; flex-direction: column;
+  align-items: flex-end; line-height: 1.25;
+}
+.notes .score .slabel { font-size: 9.5px; color: var(--muted); font-weight: 550; letter-spacing: 0.2px; }
+.notes .score .nums { font-weight: 750; font-size: 14px; color: var(--muted); }
 .notes .score .to { color: var(--accent-ink); font-size: 17px; }
 .notes .score .arrow { color: var(--muted); font-size: 12px; }
 .notes ul { margin: 0; padding: 0 14px 12px 28px; color: var(--muted); }
@@ -233,6 +255,7 @@ body.dropping::after {
 details.sec {
   background: var(--card); border: 1px solid var(--line);
   border-radius: var(--r); margin-bottom: 8px;
+  interpolate-size: allow-keywords;
 }
 details.sec[open] { border-left: 3px solid var(--accent); }
 details.sec summary {

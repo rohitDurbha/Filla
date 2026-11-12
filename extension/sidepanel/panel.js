@@ -304,6 +304,11 @@ function renderNotes(text) {
 
   const m = text.match(/\b(\d{1,3})\s*(?:to|→|->)\s*(\d{1,3})\b/);
   if (m) {
+    const label = document.createElement("span");
+    label.className = "slabel";
+    label.textContent = "Similarity score";
+    const nums = document.createElement("span");
+    nums.className = "nums";
     const from = document.createElement("span");
     from.className = "from";
     from.textContent = m[1];
@@ -313,7 +318,8 @@ function renderNotes(text) {
     const to = document.createElement("span");
     to.className = "to";
     to.textContent = m[2];
-    scoreBox.append(from, arrow, to);
+    nums.append(from, arrow, to);
+    scoreBox.append(label, nums);
   }
 
   text.split("\n")

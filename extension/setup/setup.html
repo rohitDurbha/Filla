@@ -169,12 +169,24 @@
     <section class="step hidden" data-step="3">
       <h1>Your rules for Claude</h1>
       <p class="lead">These rules drive every tailoring run. Say what Claude
-      may rewrite, what stays frozen, how projects get picked, and any layout
-      limits. The better the rules, the better the resumes.
-      <button class="linkish" id="rules-template">Insert a starter template</button></p>
+      may rewrite, what stays frozen, how projects get picked, and any
+      layout limits. The better the rules, the better the resumes.</p>
+      <div class="card" style="padding:14px 16px">
+        <div class="rowtop" style="display:flex; gap:10px">
+          <button class="filebtn" id="rules-template" style="flex:1">Use the proven pipeline</button>
+          <button class="filebtn" id="rules-upload" style="flex:1">Upload my rules.md</button>
+          <input type="file" id="rules-file" accept=".md,.txt,text/plain,text/markdown" hidden />
+        </div>
+        <p class="hint" style="margin-top:10px">The proven pipeline is the
+        battle-tested five-step process this extension was built around.
+        Score the resume against the posting, weave missing keywords into
+        honest bullets, pick projects from GitHub, rescan like a tired
+        recruiter, repeat until the score clears 90. Parts in [brackets] are
+        yours to fill in, and everything is editable right here.</p>
+      </div>
       <div class="card">
-        <textarea id="rules" placeholder="Write your tailoring rules here..."
-                  style="min-height:260px"></textarea>
+        <textarea id="rules" placeholder="Write your tailoring rules here, or start from one of the options above."
+                  style="min-height:300px"></textarea>
       </div>
       <div class="nav">
         <button class="ghost" data-back>Back</button>

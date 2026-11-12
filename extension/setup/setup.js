@@ -6,29 +6,63 @@ const $ = (id) => document.getElementById(id);
 const STEPS = 6;
 let step = 0;
 
-const RULES_TEMPLATE = `MY TAILORING RULES
+// The proven pipeline: the five-step process this extension was built
+// around, generalized. Bracketed parts are the user's to fill in.
+const RULES_TEMPLATE = `MASTER RULES FOR ALL JOB DESCRIPTIONS
 
-What Claude may change
-- Rewrite work experience bullets to weave in the job description's
-  keywords, tools, and skills, keeping every claim honest and never
-  exaggerating beyond what I actually did.
-- Reorder bullets and sections so the most relevant work leads.
-- Swap projects in and out, choosing from my resume and my public GitHub
-  repositories, picking whatever best fits the job. Project core ideas
-  never change, only the tools mentioned may shift toward the job.
-- Tune the skills section to the job. Only real skills, no buzzwords.
+The 5-step pipeline (run for every job, in order)
 
-What stays fixed
-- Contact info, dates, employers, titles, and degrees never change.
-- (List any bullets whose wording you want frozen, word for word.)
+Step 1. Choose the base resume
+Pick the right track by analyzing the job description.
+[Explain which of your tracks maps to which role types. For example, a
+Data track for Data Scientist, Data Analyst, and BI roles, a Software
+track for Software Engineer and ML Engineer roles.]
+
+Step 2. Recruiter analysis
+Score the base resume against the job description out of 100, identify
+the top 5 missing keywords, and call out the 3 red flags a hiring
+manager would spot in under 10 seconds.
+
+Step 3. Rewrite experience and skills
+Use the XYZ formula (Accomplished X as measured by Y by doing Z) to
+weave missing keywords, skills, and tools naturally into work experience
+bullets with concrete measurable impact. Keep every claim honest and
+never exaggerate beyond what I actually did. Project core ideas and
+narratives stay the same, only the tools referenced within them may
+shift toward the job. Never use sentences verbatim from the job
+description.
+
+Step 4. Summary and skills section
+Summary is one line to avoid clutter. Customize the skills section to
+the job plus a few forward-looking extras. Only actual skills someone
+would put on a resume, never phrases lifted from the posting to inflate
+the score. Keep every skills row short enough that nothing overflows
+the line.
+
+Step 5. ATS and hiring manager rescan
+Act as an ATS filter and an exhausted recruiter reading 200 resumes.
+Flag sections that would get skipped, rewrite them with the same rules,
+and rescore. The final score must be at least 90.
+
+Fixed facts
+Contact info, dates, employers, titles, and degrees never change.
+[List any bullets whose wording is frozen word for word, such as a
+research result you always state the same way.]
+
+Project selection
+Choose projects from the base resume and my public GitHub, picking
+whichever combination best fits the job. The number of projects is
+whatever relevance and the one-page limit call for.
+[Name any project that should lead for certain role types.]
 
 Layout
-- The compiled PDF must always be exactly one page.
-- (Add any margins, spacing, or section-order rules your template needs.)
+The compiled PDF is always exactly one page, without fail.
+[Add any margin, spacing, or section-order rules your template needs.]
 
 Writing style
-- Start bullets with strong action verbs. No em dashes, no semicolons.
-- Never copy sentences verbatim from the job description.`;
+Start bullets with strong action verbs, two lines maximum per bullet.
+No em dashes, colons, or semicolons in bullets. Keywords woven in
+naturally, never listed or manufactured.`;
 
 function showStep(n) {
   step = n;
@@ -133,9 +167,20 @@ renderTracks();
 
 $("rules-template").addEventListener("click", () => {
   const ta = $("rules");
-  if (!ta.value.trim() || confirm("Replace what you have written with the template?")) {
+  if (!ta.value.trim() || confirm("Replace what you have written with the pipeline template?")) {
     ta.value = RULES_TEMPLATE;
+    ta.focus();
+    const i = ta.value.indexOf("[");
+    if (i > -1) ta.setSelectionRange(i, ta.value.indexOf("]") + 1);
   }
+});
+
+$("rules-upload").addEventListener("click", () => $("rules-file").click());
+$("rules-file").addEventListener("change", async (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  $("rules").value = await f.text();
+  e.target.value = "";
 });
 
 // ---------- validation ----------
