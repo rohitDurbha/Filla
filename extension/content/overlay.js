@@ -22,24 +22,29 @@
 
     .chip {
       position: fixed; right: 18px; z-index: 2147483000;
-      width: 46px; height: 46px; border-radius: 50%; border: none;
-      cursor: grab; color: white; font: 800 19px/1 system-ui, sans-serif;
-      background: linear-gradient(135deg, #7c5cff, #38bdf8);
-      box-shadow: 0 6px 22px rgba(124, 92, 255, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 1px solid #E8E9F0;
+      cursor: grab; color: #17181D; font: 800 19px/1 system-ui, sans-serif;
+      background: #FFFFFF;
+      box-shadow: 0 2px 6px rgba(23, 24, 29, 0.08), 0 10px 28px rgba(23, 24, 29, 0.14);
       display: flex; align-items: center; justify-content: center;
       transition: transform 0.15s ease, box-shadow 0.2s ease;
       touch-action: none; user-select: none;
     }
-    .chip:hover { transform: scale(1.07); box-shadow: 0 8px 28px rgba(124, 92, 255, 0.6); }
+    .chip::after {
+      content: ""; position: absolute; right: 9px; top: 9px;
+      width: 6px; height: 6px; border-radius: 50%; background: #99A5F2;
+    }
+    .chip:hover { transform: scale(1.07); box-shadow: 0 4px 10px rgba(23,24,29,0.1), 0 14px 34px rgba(23,24,29,0.18); }
     .chip.dragging { cursor: grabbing; transform: scale(1.12); transition: none; }
-    .chip:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+    .chip:focus-visible { outline: 2px solid #99A5F2; outline-offset: 2px; }
 
     .card {
       position: fixed; right: 76px; z-index: 2147483000;
       width: 396px; height: min(780px, calc(100vh - 40px));
-      border-radius: 18px; overflow: hidden; background: #10121d;
-      border: 1px solid rgba(124, 92, 255, 0.25);
-      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.2);
+      border-radius: 18px; overflow: hidden; background: #F6F6F9;
+      border: 1px solid #E8E9F0;
+      box-shadow: 0 4px 12px rgba(23, 24, 29, 0.07), 0 32px 80px rgba(23, 24, 29, 0.18);
       transform-origin: top right;
       transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
     }

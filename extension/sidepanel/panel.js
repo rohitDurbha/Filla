@@ -1,17 +1,19 @@
-// Filla side panel state machine.
+// Filla panel state machine.
 // job -> (tailor with Claude | use own PDF) -> review -> final PDF -> fill
 
 const SERVER = "http://127.0.0.1:8765";
 
 const state = {
-  tab: null,
   job: null,
   tracks: {},
   pdfFilename: "resume.pdf",
   appId: null,
   fields: null,
   dirty: false,
-  source: null, // "claude" | "pdf"
+  source: null,   // "claude" | "pdf"
+  zoom: 1,
+  cancelId: null,
+  busyReturn: "job",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -54,6 +56,28 @@ async function api(path, body, signal) {
     throw new Error(detail);
   }
   return resp.json();
+}
+
+// ---------- talking to the page ----------
+
+async function getTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab;
+}
+
+const CONTENT_FILES = ["content/adapters.js", "content/autofill.js", "content/detector.js"];
+
+// Self-heal: after an extension reload, pages keep orphaned content scripts
+// and messaging fails with "Receiving end does not exist". Re-inject and retry.
+async function sendToTab(message) {
+  const tab = await getTab();
+  if (!tab?.id) throw new Error("No active tab.");
+  try {
+    return await chrome.tabs.sendMessage(tab.id, message);
+  } catch (e) {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: CONTENT_FILES });
+    return await chrome.tabs.sendMessage(tab.id, message);
+  }
 }
 
 // ---------- cancellable busy state ----------
@@ -104,11 +128,6 @@ async function checkServer() {
   }
 }
 
-async function getActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
-}
-
 function suggestTrack(job) {
   const t = ((job.title || "") + " " + (job.description || "")).toLowerCase();
   const scores = {
@@ -126,16 +145,14 @@ function suggestTrack(job) {
 }
 
 async function detectJob() {
-  const tab = await getActiveTab();
-  state.tab = tab?.id;
-  if (!tab?.id) return show("nosite");
   try {
-    const job = await chrome.tabs.sendMessage(tab.id, { action: "get_job" });
+    const job = await sendToTab({ action: "get_job" });
     if (!job?.supported) return show("nosite");
     state.job = job;
     $("job-title").textContent = job.title || "(title not detected)";
     $("job-company").textContent = job.company || "";
     $("job-ats").textContent = job.ats;
+    $("jd-warn").classList.toggle("hidden", (job.description || "").length >= 400);
     const s = suggestTrack(job);
     if (state.tracks[s.track]) $("track").value = s.track;
     $("track-hint").textContent = s.confident
@@ -145,6 +162,13 @@ async function detectJob() {
   } catch {
     show("nosite");
   }
+}
+
+function resetFlow() {
+  state.appId = null; state.fields = null; state.source = null;
+  state.dirty = false; state.zoom = 1;
+  $("stage-resume-label").textContent = "Resume";
+  detectJob();
 }
 
 // ---------- path one: tailor with Claude ----------
@@ -166,7 +190,7 @@ $("apply").addEventListener("click", async () => {
     }, signal);
     enterReview(out);
   } catch (e) {
-    if (e.name === "AbortError") return; // user cancelled, already navigated
+    if (e.name === "AbortError") return;
     show("job"); fail(e);
   }
 });
@@ -231,15 +255,18 @@ function enterReview(out) {
     : "Everything below comes from the tailored resume. Edits are written back into the LaTeX before the final PDF.";
   const notes = $("claude-notes");
   if (state.source === "claude" && out.notes) {
-    notes.innerHTML = "<b>What Claude changed</b>\n";
-    notes.appendChild(document.createTextNode(out.notes));
+    $("claude-notes-text").textContent = out.notes;
     notes.classList.remove("hidden");
+    notes.open = false;
   } else {
     notes.classList.add("hidden");
   }
   renderEditor(out.fields);
   show("review");
 }
+
+$("review-restart").addEventListener("click", resetFlow);
+$("fill-restart").addEventListener("click", resetFlow);
 
 function inp(label, value, onchange, textarea = false) {
   const wrap = document.createElement("label");
@@ -255,6 +282,7 @@ function inp(label, value, onchange, textarea = false) {
 
 function section(title, open = false) {
   const d = document.createElement("details");
+  d.className = "sec";
   if (open) d.open = true;
   const s = document.createElement("summary");
   s.textContent = title;
@@ -285,7 +313,7 @@ function renderEditor(f) {
   pb.appendChild(inp("GitHub", P.github, (v) => (P.github = v)));
   root.appendChild(pd);
 
-  if (f.summary !== undefined && state.source === "claude") {
+  if (f.summary !== undefined) {
     const [sd, sb] = section("Summary");
     sb.appendChild(inp("Summary", f.summary, (v) => (f.summary = v), true));
     root.appendChild(sd);
@@ -302,9 +330,9 @@ function renderEditor(f) {
         }));
         bulletsArea(b, e);
       }],
-    ["Research experience", f.research_experience, (e) => `${e.role || "?"} at ${e.org || "?"}`,
+    ["Research experience", f.research_experience, (e) => `${e.role || "?"}`,
       (b, e) => {
-        b.appendChild(inp("Role", e.role, (v) => (e.role = v)));
+        b.appendChild(inp("Title or role", e.role, (v) => (e.role = v)));
         b.appendChild(inp("Organization", e.org, (v) => (e.org = v)));
         bulletsArea(b, e);
       }],
@@ -349,7 +377,6 @@ function renderEditor(f) {
 
 $("review-approve").addEventListener("click", async () => {
   if (state.source === "pdf") {
-    // No LaTeX to rebuild; just persist the edits for the autofill step.
     try { await api(`/fields/${state.appId}`, state.fields); } catch (e) { return fail(e); }
   } else if (state.dirty) {
     const signal = startBusy("review", "Applying your edits to the resume…");
@@ -367,7 +394,7 @@ $("review-approve").addEventListener("click", async () => {
   enterPdfView();
 });
 
-// ---------- pdf approval ----------
+// ---------- final pdf: preview, zoom, jump-to-source ----------
 
 async function loadPreview() {
   const box = $("pdf-pages");
@@ -379,6 +406,7 @@ async function loadPreview() {
       const img = document.createElement("img");
       img.src = `${SERVER}/preview/${state.appId}/${i}?t=${Date.now()}`;
       img.alt = `Resume page ${i + 1}`;
+      img.dataset.page = i;
       box.appendChild(img);
     }
   } catch (e) {
@@ -387,12 +415,22 @@ async function loadPreview() {
   }
 }
 
+function applyZoom() {
+  $("pdf-pages").style.setProperty("--zoom", state.zoom);
+  $("zoom-level").textContent = Math.round(state.zoom * 100) + "%";
+}
+$("zoom-in").addEventListener("click", () => { state.zoom = Math.min(2.5, state.zoom + 0.25); applyZoom(); });
+$("zoom-out").addEventListener("click", () => { state.zoom = Math.max(0.5, state.zoom - 0.25); applyZoom(); });
+
 function enterPdfView() {
   $("pdf-approve").textContent = state.source === "pdf"
     ? "Approve and continue"
     : "Approve and download";
-  $("edit-tex").classList.toggle("hidden", state.source === "pdf");
+  const noTex = state.source === "pdf";
+  $("edit-tex").classList.toggle("hidden", noTex);
+  $("jump-hint").classList.toggle("hidden", noTex);
   closeTexEditor();
+  applyZoom();
   loadPreview();
   show("pdf");
 }
@@ -403,17 +441,41 @@ function closeTexEditor() {
   $("pdf-actions").classList.remove("hidden");
 }
 
-$("edit-tex").addEventListener("click", async () => {
+async function openTexEditor(cursorIndex = null, cursorLength = 0) {
   try {
     const { tex } = await api(`/tex/${state.appId}`);
-    $("tex-area").value = tex;
+    const ta = $("tex-area");
+    ta.value = tex;
     $("pdf-pages").classList.add("hidden");
     $("pdf-actions").classList.add("hidden");
     $("tex-editor").classList.remove("hidden");
+    if (cursorIndex !== null) {
+      ta.focus();
+      ta.setSelectionRange(cursorIndex, cursorIndex + cursorLength);
+      const line = tex.slice(0, cursorIndex).split("\n").length;
+      ta.scrollTop = Math.max(0, (line - 6) * 16.5);
+    }
   } catch (e) { fail(e); }
-});
+}
 
+$("edit-tex").addEventListener("click", () => openTexEditor());
 $("tex-cancel").addEventListener("click", closeTexEditor);
+
+// Overleaf-style jump: double-click the preview, land in the LaTeX.
+$("pdf-pages").addEventListener("dblclick", async (e) => {
+  const img = e.target.closest("img");
+  if (!img || state.source === "pdf") return;
+  const rect = img.getBoundingClientRect();
+  try {
+    const hit = await api("/locate", {
+      app_id: state.appId,
+      page: Number(img.dataset.page || 0),
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    });
+    openTexEditor(hit.index, hit.length);
+  } catch (err) { fail(err); }
+});
 
 $("tex-recompile").addEventListener("click", async () => {
   const btn = $("tex-recompile");
@@ -441,49 +503,66 @@ $("pdf-approve").addEventListener("click", async () => {
     } catch (e) { fail(e); }
   }
   show("fill");
+  $("fill-ok").innerHTML = "";
+  $("fill-skip").innerHTML = "";
   $("fill-summary").classList.add("hidden");
 });
 
-// ---------- autofill ----------
+// ---------- autofill, with a live follow-along feed ----------
+
+chrome.runtime.onMessage.addListener((m) => {
+  if (m?.filla !== "fill_progress" || m.status === "done") return;
+  const box = m.status === "filled" ? $("fill-ok") : $("fill-skip");
+  if (m.status === "skipped" && !box.querySelector(".head")) {
+    const h = document.createElement("div");
+    h.className = "head";
+    h.textContent = "Still needs you";
+    box.appendChild(h);
+  }
+  if ([...box.children].some((c) => c.textContent === m.label)) return;
+  const d = document.createElement("div");
+  d.textContent = m.label;
+  box.appendChild(d);
+  $("fill-summary").classList.remove("hidden");
+});
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
 
 $("fill").addEventListener("click", async () => {
   const { eeoProfile } = await chrome.storage.local.get("eeoProfile");
   $("fill").disabled = true;
+  $("fill-ok").innerHTML = "";
+  $("fill-skip").innerHTML = "";
   try {
-    const res = await chrome.tabs.sendMessage(state.tab, {
+    // The panel fetches the PDF (its origin is allowed by the server) and
+    // hands the bytes over, since content scripts cannot cross-origin fetch.
+    const resp = await fetch(`${SERVER}/pdf/${state.appId}`);
+    if (!resp.ok) throw new Error("Could not load the resume PDF from the server.");
+    const pdfBase64 = await blobToBase64(await resp.blob());
+    const res = await sendToTab({
       action: "fill",
       payload: {
         fields: state.fields,
         eeo: eeoProfile || {},
-        pdfUrl: `${SERVER}/pdf/${state.appId}`,
+        pdfBase64,
         pdfFilename: state.pdfFilename,
       },
     });
     if (!res?.ok) throw new Error(res?.error || "Fill failed");
-    const okBox = $("fill-ok"), skipBox = $("fill-skip");
-    okBox.innerHTML = ""; skipBox.innerHTML = "";
-    res.filled.forEach((x) => {
-      const d = document.createElement("div"); d.textContent = x; okBox.appendChild(d);
-    });
-    if (res.skipped.length) {
-      const h = document.createElement("div");
-      h.className = "head";
-      h.textContent = "Still needs you";
-      skipBox.appendChild(h);
-      res.skipped.slice(0, 15).forEach((x) => {
-        const d = document.createElement("div"); d.textContent = x; skipBox.appendChild(d);
-      });
-    }
-    $("fill-summary").classList.remove("hidden");
   } catch (e) { fail(e); }
   $("fill").disabled = false;
 });
 
 $("done").addEventListener("click", async () => {
   try { await api("/status", { app_id: state.appId, status: "applied" }); } catch {}
-  state.appId = null; state.fields = null; state.source = null;
-  $("stage-resume-label").textContent = "Resume";
-  detectJob();
+  resetFlow();
 });
 
 // ---------- misc ----------

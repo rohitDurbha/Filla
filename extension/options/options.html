@@ -5,32 +5,29 @@
   <title>Filla one-time profile</title>
   <style>
     :root {
-      --bg: #10121d; --surface: #181b2a; --line: #262b41;
-      --text: #edeffa; --muted: #8f95b2;
-      --violet: #7c5cff; --cyan: #38bdf8;
-      --grad: linear-gradient(135deg, var(--violet), var(--cyan));
-      --ok: #46d39a;
+      --bg: #F6F6F9; --card: #FFFFFF; --line: #E8E9F0;
+      --text: #17181D; --muted: #7A7F8E;
+      --accent: #99A5F2; --accent-soft: #EAEDFD; --accent-ink: #5B67C7;
+      --ok: #4EAE85;
+      --shadow: 0 1px 2px rgba(23,24,29,0.05), 0 8px 24px rgba(23,24,29,0.06);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0; background: var(--bg); color: var(--text); min-height: 100vh;
       font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
     }
-    .glow {
-      position: fixed; inset: -160px 0 auto 0; height: 320px; pointer-events: none;
-      background: radial-gradient(55% 100% at 50% 0%, rgba(124,92,255,0.15), transparent 70%);
-    }
-    .wrap { max-width: 620px; margin: 0 auto; padding: 56px 24px 80px; position: relative; }
-    .logo {
-      font-size: 24px; font-weight: 800; letter-spacing: -0.5px;
-      background: var(--grad); -webkit-background-clip: text; background-clip: text;
-      color: transparent;
+    .wrap { max-width: 620px; margin: 0 auto; padding: 56px 24px 80px; }
+    .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo i {
+      display: inline-block; width: 8px; height: 8px; margin-left: 3px;
+      border-radius: 50%; background: var(--accent);
     }
     h1 { font-size: 20px; font-weight: 750; letter-spacing: -0.3px; margin: 18px 0 6px; }
     p.note { color: var(--muted); font-size: 13.5px; margin: 0 0 26px; max-width: 54ch; }
     .card {
-      background: var(--surface); border: 1px solid var(--line);
+      background: var(--card); border: 1px solid var(--line);
       border-radius: 14px; padding: 20px 22px; margin-bottom: 14px;
+      box-shadow: var(--shadow);
     }
     .card h2 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
     .card p { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
@@ -42,26 +39,25 @@
       transition: border-color 0.15s, box-shadow 0.15s;
     }
     select:focus {
-      outline: none; border-color: var(--violet);
-      box-shadow: 0 0 0 3px rgba(124,92,255,0.18);
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
     .actions { display: flex; align-items: center; gap: 14px; margin-top: 24px; }
     button {
       padding: 12px 26px; font-size: 14.5px; font-weight: 700; color: white;
-      background: var(--grad); border: none; border-radius: 11px; cursor: pointer;
-      font-family: inherit; box-shadow: 0 4px 18px rgba(124,92,255,0.28);
+      background: var(--text); border: none; border-radius: 11px; cursor: pointer;
+      font-family: inherit; box-shadow: var(--shadow);
       transition: transform 0.12s, box-shadow 0.2s;
     }
-    button:hover { box-shadow: 0 6px 24px rgba(124,92,255,0.42); transform: translateY(-1px); }
-    button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+    button:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(23,24,29,0.08), 0 12px 28px rgba(23,24,29,0.12); }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #saved { color: var(--ok); font-weight: 650; opacity: 0; transition: opacity 0.25s; }
     #saved.on { opacity: 1; }
   </style>
 </head>
 <body>
-  <div class="glow" aria-hidden="true"></div>
   <div class="wrap">
-    <div class="logo">Filla</div>
+    <div class="logo">Filla<i></i></div>
     <h1>One-time profile</h1>
     <p class="note">
       US applications ask a handful of questions that never appear on a resume.

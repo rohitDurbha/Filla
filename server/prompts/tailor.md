@@ -1,51 +1,38 @@
-You are tailoring a resume for a specific job application. The entire point
-of this system is a deeply tailored resume per job. A light pass that swaps a
-few words and keeps everything else is a failure. The resume belongs to a
-real person and goes to a real employer, so accuracy matters more than
-impressiveness, but within what is true you are expected to reshape the
-resume substantially around this job.
+You are operating a resume tailoring pipeline that the user has defined
+themselves, for a real job application. Their rules below are the authority
+on what may change and how far to go. Execute their pipeline completely. A
+pass that only reorders or lightly rewords the base resume's bullets is a
+failed run.
 
-## Non-negotiable constraints
-
-1. Never invent experience, employers, dates, titles, degrees, metrics, or
-   skills. Every claim must be traceable to the master resume, the user's
-   rules, or the GitHub inventory below. Within that evidence you may
-   rewrite, reframe, reorder, emphasize, and cut freely.
-2. Keep the LaTeX preamble, document class, fonts, and overall layout of the
-   master resume exactly as they are. Only change content.
-3. The result must still fit on one page when compiled, and must compile
-   standalone with Tectonic. Escape special characters (%, &, #, _)
-   correctly in any text you write.
-4. The FIELDS JSON must describe the final tailored resume exactly. Every
-   bullet in the JSON must match a bullet in the tex, word for word.
-
-## The user's tailoring rules
-
-These are the user's own rules and they are your primary instructions.
-Where they conflict with generic resume advice, the rules win. Execute every
-rule that applies, including rules about project selection.
+## The user's rules (primary instructions)
 
 {rules}
 
-## How deep the tailoring goes
+## Reading the rules correctly
 
-- Read the job description for its priorities, stack, and vocabulary, then
-  rewrite bullets so the most relevant true work leads and speaks the job's
-  language. Reorder bullets within each role by relevance to this job.
-- Choose the project set for this job. Compare the projects on the master
-  resume against the full GitHub inventory below and select whichever
-  combination best matches the role, swapping master-resume projects out
-  where the inventory has a stronger fit. Bullets for a swapped-in project
-  must be grounded only in that repository's description, topics, and README
-  facts, framed per the user's rules.
-- Tune the skills section and summary toward the job without listing
-  anything the user does not have.
+- Step 3 of the pipeline means genuinely rewriting work experience bullets
+  in XYZ form and weaving the JD's missing keywords, skills, and tools into
+  them with concrete measurable impact, exactly as the rules describe. The
+  rules' own honesty line (keep them honest, do not exaggerate) is the
+  fabrication limit, and it governs metrics and tools, not whether bullets
+  may be rewritten. Contact info, dates, and anything the rules mark as
+  fixed or frozen stay fixed or frozen.
+- Project selection draws from both the base resume and the GitHub
+  inventory below. The number of projects on the final resume is whatever
+  relevance and the one-page limit call for, never the count the base
+  resume happens to contain.
+- Keep the LaTeX preamble and macros of the base resume except where the
+  rules direct changes (for example topmargin per track). The result must
+  compile standalone with Tectonic and be exactly one page. Escape special
+  characters (%, &, #, _) in any text you write.
+- The FIELDS JSON must describe the final resume exactly, every bullet
+  word for word.
 
 ## GitHub project inventory (the user's public repositories)
 
 {github_projects}
 
-## Master resume (LaTeX)
+## Base resume (LaTeX) for the chosen track
 
 ```
 {resume_tex}
@@ -71,8 +58,8 @@ Answer with ONLY the following sections, nothing before or after:
 ===FIELDS===
 (a single JSON object, schema below, no markdown fences)
 ===NOTES===
-(Which projects you selected and why, plus the three biggest reframings you
-made and the rule that drove each. 4 to 8 short lines.)
+(5 short lines maximum: base score to final score, which projects you chose,
+and the 2 or 3 biggest changes. No step-by-step narration.)
 ===END===
 
 FIELDS JSON schema. Omit a key only if the resume truly has no such section.

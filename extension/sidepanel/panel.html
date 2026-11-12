@@ -5,10 +5,8 @@
   <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
-  <div class="glow" aria-hidden="true"></div>
-
   <header>
-    <span class="logo">Filla</span>
+    <span class="logo">Filla<span class="logo-dot"></span></span>
     <span id="server-dot" title="Checking the local server"><span class="dot"></span><span id="server-label">server</span></span>
   </header>
 
@@ -28,8 +26,8 @@
     <section id="view-nosite" class="view">
       <div class="empty">
         <div class="empty-mark">⌖</div>
-        <p>Open a job posting on Greenhouse, Lever, Ashby, or SmartRecruiters
-        and it will appear here.</p>
+        <p>Open a job posting on Greenhouse, Lever, Ashby, or
+        SmartRecruiters and it will appear here.</p>
         <button id="recheck" class="ghost">Check this tab again</button>
       </div>
     </section>
@@ -41,6 +39,9 @@
         <div id="job-company" class="muted"></div>
         <span id="job-ats" class="pill"></span>
       </div>
+      <p id="jd-warn" class="warnline hidden">The posting text looks thin from
+      this page. Open the job's Overview tab and press Check again for a
+      deeper tailoring pass.</p>
       <label class="field">Resume track
         <select id="track"></select>
       </label>
@@ -69,17 +70,32 @@
 
     <!-- Review extracted fields -->
     <section id="view-review" class="view hidden">
-      <h2>Check what goes on the application</h2>
+      <div class="rowhead">
+        <h2>Check what goes on the application</h2>
+        <button id="review-restart" class="linkish">Start over</button>
+      </div>
       <p id="review-note" class="muted small"></p>
-      <div id="claude-notes" class="notes hidden"></div>
+      <details id="claude-notes" class="notes hidden">
+        <summary>What Claude changed</summary>
+        <p id="claude-notes-text"></p>
+      </details>
       <div id="fields-editor"></div>
       <button id="review-approve" class="primary">Looks right, continue</button>
     </section>
 
     <!-- Final PDF approval -->
     <section id="view-pdf" class="view hidden">
-      <h2>Final resume</h2>
+      <div class="rowhead">
+        <h2>Final resume</h2>
+        <div class="zoom">
+          <button id="zoom-out" class="zbtn" title="Zoom out">−</button>
+          <span id="zoom-level">100%</span>
+          <button id="zoom-in" class="zbtn" title="Zoom in">+</button>
+        </div>
+      </div>
       <div id="pdf-pages" class="pdf-pages"></div>
+      <p class="muted small" id="jump-hint">Double-click anywhere on the preview
+      to jump to that spot in the LaTeX.</p>
       <div id="tex-editor" class="hidden">
         <textarea id="tex-area" spellcheck="false" aria-label="LaTeX source"></textarea>
         <div class="btnrow">
@@ -96,9 +112,12 @@
 
     <!-- Fill the application -->
     <section id="view-fill" class="view hidden">
-      <h2>Fill the application</h2>
-      <p class="muted small">Fills one page at a time. On multi-step
-      applications, click again after each step loads.</p>
+      <div class="rowhead">
+        <h2>Fill the application</h2>
+        <button id="fill-restart" class="linkish">Start over</button>
+      </div>
+      <p class="muted small">Fills one page at a time and walks the page as it
+      goes. On multi-step applications, click again after each step loads.</p>
       <button id="fill" class="primary">Fill this page</button>
       <div id="fill-summary" class="hidden">
         <div id="fill-ok" class="oklist"></div>
@@ -118,7 +137,7 @@
 
   <footer>
     <a href="#" id="open-options">One-time profile</a>
-    <span class="muted small">v0.2</span>
+    <span class="muted small">v0.3</span>
   </footer>
 
   <script src="panel.js"></script>

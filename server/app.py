@@ -13,6 +13,7 @@ Run:  uvicorn app:app --host 127.0.0.1 --port 8765
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -73,6 +74,13 @@ class ReviseRequest(BaseModel):
 
 class CancelRequest(BaseModel):
     cancel_id: str
+
+
+class LocateRequest(BaseModel):
+    app_id: str
+    page: int
+    x: float  # fraction of page width, from the left
+    y: float  # fraction of page height, from the top
 
 
 class StatusRequest(BaseModel):
@@ -267,6 +275,53 @@ def retex(req: RetexRequest):
     except latex.LatexError as e:
         raise HTTPException(502, str(e))
     return {"ok": True, "pdf_url": f"/pdf/{req.app_id}"}
+
+
+@app.post("/locate")
+def locate(req: LocateRequest):
+    """Map a click on the preview to a position in the LaTeX source, the
+    Overleaf jump-to-source idea. Reads the words under the click from the
+    PDF's text layer, then finds them in the tex."""
+    import pypdfium2 as pdfium
+
+    d = _run_dir(req.app_id)
+    tex_path = d / "resume.tex"
+    if not tex_path.exists():
+        raise HTTPException(404, "This run has no LaTeX source.")
+    tex = tex_path.read_text()
+
+    doc = pdfium.PdfDocument(d / "resume.pdf")
+    try:
+        if not 0 <= req.page < len(doc):
+            raise HTTPException(400, "No such page")
+        page = doc[req.page]
+        w, h = page.get_size()
+        x, y = req.x * w, (1 - req.y) * h  # PDF origin is bottom left
+        snippet = page.get_textpage().get_text_bounded(
+            left=x - 80, bottom=y - 9, right=x + 80, top=y + 9
+        )
+    finally:
+        doc.close()
+
+    words = [w2 for w2 in re.findall(r"[A-Za-z0-9%+.\-]{4,}", snippet or "")]
+    if not words:
+        raise HTTPException(404, "No text under the click.")
+
+    # Longest word is the most distinctive anchor; disambiguate repeated
+    # occurrences with a neighboring word from the same snippet.
+    anchor = max(words, key=len)
+    spots = [m.start() for m in re.finditer(re.escape(anchor), tex)]
+    if not spots:
+        raise HTTPException(404, "Could not find that text in the LaTeX.")
+    best = spots[0]
+    if len(spots) > 1:
+        neighbors = [w2 for w2 in words if w2 != anchor]
+        for s in spots:
+            window = tex[max(0, s - 160): s + 160]
+            if any(n in window for n in neighbors):
+                best = s
+                break
+    return {"index": best, "length": len(anchor)}
 
 
 @app.get("/preview/{app_id}")

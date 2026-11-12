@@ -1,8 +1,8 @@
 // Filla autofill engine.
-// Strategy: adapter selector hints first, then generic label matching over
-// every visible form control on the page. React-safe value setting
-// throughout. Returns a summary of what was filled and what was skipped so
-// the side panel can show the user what still needs a human.
+// Fills sequentially, scrolling to each field and flashing it as it fills,
+// so the user can follow along on the page while the panel shows a live
+// list. Strategy per field: adapter selector hints first, then generic
+// label matching, React-safe value setting throughout.
 
 const FillaFill = (() => {
   // ---------- low-level helpers ----------
@@ -30,6 +30,20 @@ const FillaFill = (() => {
     return (s || "").toLowerCase().replace(/\s+/g, " ").replace(/[*:]/g, "").trim();
   }
 
+  // Strip machine noise (uuids, system field ids) so labels read as humans
+  // wrote them.
+  function cleanLabel(s) {
+    const out = (s || "")
+      .replace(/\b[0-9a-f]{6,}\b/gi, "")
+      .replace(/\b[0-9a-f]{4,}-[0-9a-f-]{4,}\b/gi, "")
+      .replace(/\bsystem\s*field\w*\b/gi, "")
+      .replace(/_{2,}/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/[|,]\s*$/g, "")
+      .trim();
+    return out.length >= 3 ? out : "";
+  }
+
   function labelFor(el) {
     const bits = [];
     if (el.id) {
@@ -48,7 +62,6 @@ const FillaFill = (() => {
     }
     if (el.placeholder) bits.push(el.placeholder);
     if (el.name) bits.push(el.name.replace(/[\[\]_-]+/g, " "));
-    // Last resort: nearest field container's text (common in Ashby/React forms)
     if (!bits.length) {
       const box = el.closest("div,fieldset");
       if (box) bits.push(box.textContent.slice(0, 120));
@@ -57,7 +70,6 @@ const FillaFill = (() => {
   }
 
   function fuzzyPickOption(options, wanted) {
-    // wanted: array of lowercase substrings, first match wins
     for (const w of wanted) {
       const hit = options.find((o) => norm(o.label).includes(w));
       if (hit) return hit;
@@ -65,9 +77,37 @@ const FillaFill = (() => {
     return null;
   }
 
+  // ---------- follow-along visuals ----------
+
+  let styleInjected = false;
+  function flash(el) {
+    if (!styleInjected) {
+      const st = document.createElement("style");
+      st.textContent = `
+        .filla-flash {
+          outline: 2px solid #99A5F2 !important;
+          outline-offset: 2px !important;
+          border-radius: 6px;
+          transition: outline-color 0.6s ease;
+        }`;
+      document.documentElement.appendChild(st);
+      styleInjected = true;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("filla-flash");
+    setTimeout(() => el.classList.remove("filla-flash"), 1200);
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function progress(label, status) {
+    try {
+      chrome.runtime.sendMessage({ filla: "fill_progress", label, status });
+    } catch {}
+  }
+
   // ---------- value sources ----------
 
-  // EEO canonical answers -> substrings to look for in option text.
   const EEO_OPTION_SYNONYMS = {
     gender: {
       male: ["male"],
@@ -104,7 +144,6 @@ const FillaFill = (() => {
     requires_sponsorship: { yes: ["yes"], no: ["no"] },
   };
 
-  // label regex -> how to resolve the value from {fields, eeo}
   function buildRules(fields, eeo) {
     const p = fields.personal || {};
     const exp0 = (fields.work_experience || [])[0] || {};
@@ -127,7 +166,6 @@ const FillaFill = (() => {
       { re: /school|university|college|institution/, value: edu0.school },
       { re: /degree/, value: edu0.degree },
       { re: /gpa/, value: edu0.gpa },
-      // EEO single-choice questions (selects and radio groups)
       { re: /gender(?!\s*identity\s*option)/, eeo: "gender" },
       { re: /hispanic|latino|latinx|ethnicit/, eeo: "hispanic_latino" },
       { re: /\brace\b/, eeo: "race" },
@@ -173,13 +211,16 @@ const FillaFill = (() => {
     return false;
   }
 
-  async function attachResume(input, pdfUrl, filename) {
-    const resp = await fetch(pdfUrl);
-    if (!resp.ok) throw new Error(`PDF fetch failed (${resp.status})`);
-    const blob = await resp.blob();
-    const file = new File([blob], filename, { type: "application/pdf" });
+  function base64ToFile(b64, filename) {
+    const bytes = atob(b64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new File([arr], filename, { type: "application/pdf" });
+  }
+
+  function attachResume(input, pdfBase64, filename) {
     const dt = new DataTransfer();
-    dt.items.add(file);
+    dt.items.add(base64ToFile(pdfBase64, filename));
     input.files = dt.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -187,13 +228,13 @@ const FillaFill = (() => {
 
   // ---------- main entry ----------
 
-  async function run({ fields, eeo, pdfUrl, pdfFilename, hints }) {
+  async function run({ fields, eeo, pdfBase64, pdfFilename, hints }) {
     const rules = buildRules(fields || {}, eeo || {});
     const filled = [];
     const skipped = [];
     const used = new Set();
+    const PACE = 350; // ms between fields, slow enough to follow along
 
-    // 1. Adapter hints: exact selectors for known ATS fields.
     const p = fields?.personal || {};
     const hintValues = {
       first_name: p.first_name,
@@ -207,44 +248,53 @@ const FillaFill = (() => {
       website: p.website,
       company: (fields?.work_experience || [])[0]?.company,
     };
+
+    // 1. Adapter hints.
     for (const [key, selectors] of Object.entries(hints || {})) {
       if (key === "resume") continue;
       for (const sel of selectors) {
         const el = document.querySelector(sel);
         if (el && visible(el) && hintValues[key]) {
+          flash(el);
           setNativeValue(el, hintValues[key]);
           used.add(el);
-          filled.push(key);
+          filled.push(key.replace(/_/g, " "));
+          progress(key.replace(/_/g, " "), "filled");
+          await sleep(PACE);
           break;
         }
       }
     }
 
-    // 2. Resume upload.
-    if (pdfUrl) {
+    // 2. Resume upload, as real bytes handed over by the panel.
+    if (pdfBase64) {
       const fileSelectors = (hints?.resume || []).concat(['input[type="file"]']);
       let attached = false;
       for (const sel of fileSelectors) {
         const el = document.querySelector(sel);
         if (el && !used.has(el)) {
           try {
-            await attachResume(el, pdfUrl, pdfFilename || "resume.pdf");
+            flash(el.closest("div") || el);
+            attachResume(el, pdfBase64, pdfFilename || "resume.pdf");
             used.add(el);
             filled.push("resume upload");
+            progress("resume upload", "filled");
             attached = true;
-            break;
+            await sleep(PACE);
           } catch (e) {
-            skipped.push(`resume upload (${e.message})`);
-            break;
+            skipped.push("resume upload");
+            progress("resume upload", "skipped");
           }
+          break;
         }
       }
-      if (!attached && !skipped.some((s) => s.startsWith("resume"))) {
-        skipped.push("resume upload (no file input found on this page)");
+      if (!attached && !skipped.includes("resume upload")) {
+        skipped.push("resume upload (no file box on this page)");
+        progress("resume upload", "skipped");
       }
     }
 
-    // 3. Generic pass over remaining text inputs, textareas, selects.
+    // 3. Generic pass over remaining controls.
     const controls = [
       ...document.querySelectorAll(
         'input:not([type=file]):not([type=hidden]):not([type=submit]):not([type=checkbox]):not([type=radio]), textarea, select'
@@ -252,12 +302,14 @@ const FillaFill = (() => {
     ].filter((el) => visible(el) && !used.has(el));
 
     for (const el of controls) {
-      const label = labelFor(el);
-      if (!label) continue;
-      const rule = rules.find((r) => r.re.test(label));
+      const rawLabel = labelFor(el);
+      const label = cleanLabel(rawLabel);
+      if (!rawLabel) continue;
+      const rule = rules.find((r) => r.re.test(rawLabel));
       if (!rule) {
-        if (el.required || label.includes("required")) {
-          skipped.push(label.slice(0, 70));
+        if ((el.required || rawLabel.includes("required")) && label) {
+          skipped.push(label.slice(0, 60));
+          progress(label.slice(0, 60), "skipped");
         }
         continue;
       }
@@ -266,20 +318,25 @@ const FillaFill = (() => {
         ok = fillSelect(el, rule, eeo);
       } else if (rule.value) {
         if (!el.value) {
+          flash(el);
           setNativeValue(el, rule.value);
           ok = true;
         }
       } else if (rule.eeo && eeo?.[rule.eeo]) {
-        // Text input asking an EEO question (rare). Use the stored answer verbatim.
         const map = { yes: "Yes", no: "No", decline: "Decline to self-identify" };
+        flash(el);
         setNativeValue(el, map[eeo[rule.eeo]] || eeo[rule.eeo]);
         ok = true;
       }
+      const shown = label || "field";
       if (ok) {
         used.add(el);
-        filled.push(label.slice(0, 50));
-      } else {
-        skipped.push(label.slice(0, 70));
+        filled.push(shown.slice(0, 50));
+        progress(shown.slice(0, 50), "filled");
+        await sleep(PACE);
+      } else if (label) {
+        skipped.push(shown.slice(0, 60));
+        progress(shown.slice(0, 60), "skipped");
       }
     }
 
@@ -293,16 +350,22 @@ const FillaFill = (() => {
     for (const [key, group] of Object.entries(groups)) {
       const groupLabel = norm(
         group[0].closest("fieldset")?.querySelector("legend")?.textContent ||
-          group[0].name ||
-          key
+          group[0].name || key
       );
       const rule = rules.find((r) => r.eeo && r.re.test(groupLabel));
-      if (rule && fillRadioGroup(group, rule, eeo)) {
-        filled.push(groupLabel.slice(0, 50));
+      if (rule) {
+        flash(group[0].closest("fieldset") || group[0]);
+        if (fillRadioGroup(group, rule, eeo)) {
+          const shown = cleanLabel(groupLabel) || "choice";
+          filled.push(shown.slice(0, 50));
+          progress(shown.slice(0, 50), "filled");
+          await sleep(PACE);
+        }
       }
     }
 
-    return { filled, skipped: [...new Set(skipped)] };
+    progress("", "done");
+    return { filled: [...new Set(filled)], skipped: [...new Set(skipped)] };
   }
 
   return { run };

@@ -1,19 +1,22 @@
-/* Filla — deep indigo ink, violet-to-cyan accent, one moment of motion. */
+/* Filla — light monochrome with a single pastel periwinkle accent.
+   Quiet surfaces, black primary actions, color only where state lives. */
 
 :root {
-  --bg: #10121d;
-  --surface: #181b2a;
-  --surface-2: #1e2234;
-  --line: #262b41;
-  --text: #edeffa;
-  --muted: #8f95b2;
-  --violet: #7c5cff;
-  --cyan: #38bdf8;
-  --grad: linear-gradient(135deg, var(--violet), var(--cyan));
-  --ok: #46d39a;
-  --warn: #f0b45c;
-  --err: #ff7284;
+  --bg: #F6F6F9;
+  --card: #FFFFFF;
+  --text: #17181D;
+  --muted: #7A7F8E;
+  --line: #E8E9F0;
+  --accent: #99A5F2;
+  --accent-soft: #EAEDFD;
+  --accent-ink: #5B67C7;
+  --ok: #4EAE85;
+  --warn: #B98A33;
+  --warn-soft: #FBF3E4;
+  --err: #C25B6B;
+  --err-soft: #FBEEF0;
   --r: 12px;
+  --shadow: 0 1px 2px rgba(23, 24, 29, 0.05), 0 8px 24px rgba(23, 24, 29, 0.06);
 }
 
 * { box-sizing: border-box; }
@@ -25,30 +28,21 @@ body {
   overflow-x: hidden;
 }
 
-/* a single quiet light source, top of panel */
-.glow {
-  position: fixed; inset: -140px 0 auto 0; height: 280px; pointer-events: none;
-  background: radial-gradient(60% 100% at 50% 0%, rgba(124, 92, 255, 0.16), transparent 70%);
-}
-
 header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 18px 10px; position: relative;
+  padding: 14px 18px 10px;
 }
-.logo {
-  font-size: 19px; font-weight: 800; letter-spacing: -0.4px;
-  background: var(--grad); -webkit-background-clip: text; background-clip: text;
-  color: transparent;
+.logo { font-size: 18px; font-weight: 800; letter-spacing: -0.4px; }
+.logo-dot {
+  display: inline-block; width: 7px; height: 7px; margin-left: 3px;
+  border-radius: 50%; background: var(--accent); vertical-align: 2px;
 }
 #server-dot {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--muted);
 }
-#server-dot .dot {
-  width: 7px; height: 7px; border-radius: 50%; background: var(--err);
-  box-shadow: 0 0 8px rgba(255, 114, 132, 0.6);
-}
-#server-dot.ok .dot { background: var(--ok); box-shadow: 0 0 8px rgba(70, 211, 154, 0.6); }
+#server-dot .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); }
+#server-dot.ok .dot { background: var(--ok); }
 
 /* ---- stage rail ---- */
 .stages { padding: 4px 18px 14px; position: relative; }
@@ -57,7 +51,7 @@ header {
   background: var(--line); border-radius: 2px;
 }
 #track-fill {
-  height: 100%; width: 0%; border-radius: 2px; background: var(--grad);
+  height: 100%; width: 0%; border-radius: 2px; background: var(--accent);
   transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .stages ol {
@@ -67,16 +61,16 @@ header {
 .stages li { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 24%; }
 .stages li i {
   width: 18px; height: 18px; border-radius: 50%;
-  background: var(--surface); border: 2px solid var(--line);
+  background: var(--card); border: 2px solid var(--line);
   transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
 }
 .stages li span { font-size: 10.5px; color: var(--muted); transition: color 0.3s; }
-.stages li.done i { background: var(--grad); border-color: transparent; }
+.stages li.done i { background: var(--accent); border-color: var(--accent); }
 .stages li.active i {
-  border-color: var(--violet);
-  box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.18), 0 0 14px rgba(124, 92, 255, 0.5);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
-.stages li.active span { color: var(--text); font-weight: 600; }
+.stages li.active span { color: var(--text); font-weight: 650; }
 
 main { flex: 1; position: relative; }
 
@@ -92,82 +86,87 @@ main { flex: 1; position: relative; }
 .small { font-size: 12px; }
 .center { text-align: center; }
 h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; margin: 4px 0 6px; }
+.rowhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 
 /* ---- empty state ---- */
 .empty { text-align: center; padding: 44px 8px 12px; color: var(--muted); }
-.empty-mark {
-  font-size: 30px; line-height: 1; margin-bottom: 14px;
-  background: var(--grad); -webkit-background-clip: text; background-clip: text;
-  color: transparent;
-}
+.empty-mark { font-size: 30px; line-height: 1; margin-bottom: 14px; color: var(--accent); }
 
 /* ---- job card ---- */
 .jobcard {
-  background: linear-gradient(var(--surface), var(--surface)) padding-box,
-              linear-gradient(135deg, rgba(124,92,255,0.45), rgba(56,189,248,0.25)) border-box;
-  border: 1px solid transparent;
-  border-radius: var(--r); padding: 14px 15px; margin-bottom: 14px;
+  background: var(--card); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r); padding: 14px 15px; margin-bottom: 12px;
+  box-shadow: var(--shadow);
 }
 .jobtitle { font-weight: 700; font-size: 14.5px; letter-spacing: -0.2px; }
 .pill {
   display: inline-block; margin-top: 8px; padding: 2px 9px; font-size: 10.5px;
-  border-radius: 99px; background: var(--surface-2); color: var(--muted);
-  text-transform: capitalize;
+  border-radius: 99px; background: var(--accent-soft); color: var(--accent-ink);
+  text-transform: capitalize; font-weight: 600;
+}
+.warnline {
+  font-size: 12px; color: var(--warn); background: var(--warn-soft);
+  border-radius: 9px; padding: 8px 11px; margin: 0 0 10px;
 }
 
 /* ---- form bits ---- */
 .field { display: block; margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
 select, input[type=text], textarea {
   width: 100%; margin-top: 5px; padding: 8px 10px; font-size: 13px;
-  background: var(--surface); color: var(--text);
+  background: var(--card); color: var(--text);
   border: 1px solid var(--line); border-radius: 9px; font-family: inherit;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 select:focus, input:focus, textarea:focus {
-  outline: none; border-color: var(--violet);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 textarea { resize: vertical; min-height: 56px; }
 
 button {
   border: none; border-radius: 10px; padding: 11px 14px; font-size: 13.5px;
   cursor: pointer; font-weight: 650; font-family: inherit;
-  transition: transform 0.12s, box-shadow 0.2s, opacity 0.15s;
+  transition: transform 0.12s, box-shadow 0.2s, opacity 0.15s, background 0.15s;
 }
-button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .primary {
-  width: 100%; margin-top: 14px; color: white; background: var(--grad);
-  box-shadow: 0 4px 18px rgba(124, 92, 255, 0.28);
+  width: 100%; margin-top: 14px; color: #fff; background: var(--text);
+  box-shadow: var(--shadow);
 }
-.primary:hover { box-shadow: 0 6px 24px rgba(124, 92, 255, 0.42); transform: translateY(-1px); }
+.primary:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(23,24,29,0.08), 0 12px 28px rgba(23,24,29,0.12); }
 .primary:active { transform: translateY(0); }
-.primary:disabled { opacity: 0.5; cursor: default; transform: none; }
+.primary:disabled { opacity: 0.45; cursor: default; transform: none; }
 .ghost {
-  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  background: var(--card); color: var(--muted); border: 1px solid var(--line);
 }
-.ghost:hover { color: var(--text); border-color: #39405f; }
+.ghost:hover { color: var(--text); border-color: #CDD0DC; }
 .wide { width: 100%; margin-top: 9px; }
 .btnrow { display: flex; gap: 8px; margin-top: 12px; }
 .btnrow .primary { margin-top: 0; flex: 1; }
-.linkish { background: none; border: none; color: var(--muted); font-size: 12px; padding: 0; }
-.linkish:hover { color: var(--text); }
+.linkish {
+  background: none; border: none; color: var(--muted); font-size: 12px;
+  padding: 0; font-weight: 550;
+}
+.linkish:hover { color: var(--accent-ink); }
 
 body.dropping::after {
   content: "Drop the PDF to use it"; position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(16, 18, 29, 0.88); border: 2px dashed var(--violet);
+  background: rgba(246, 246, 249, 0.92); border: 2px dashed var(--accent);
   border-radius: var(--r); margin: 10px; font-weight: 700; z-index: 50;
+  color: var(--accent-ink);
 }
 
-/* ---- tailoring shimmer: a little page being written ---- */
+/* ---- tailoring shimmer ---- */
 .paper {
   width: 180px; margin: 40px auto 20px; padding: 18px 16px 22px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 .sk {
   height: 7px; border-radius: 4px; margin-bottom: 8px;
-  background: linear-gradient(90deg, var(--surface-2) 25%, #2c3150 50%, var(--surface-2) 75%);
+  background: linear-gradient(90deg, #ECEDF4 25%, var(--accent-soft) 50%, #ECEDF4 75%);
   background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
 }
 .sk.gap { margin-top: 16px; }
@@ -176,59 +175,83 @@ body.dropping::after {
 @keyframes shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
 
+/* ---- Claude notes ---- */
 .notes {
-  margin: 4px 0 12px; padding: 10px 12px; font-size: 12px; line-height: 1.6;
-  color: var(--muted); background: var(--surface); border-radius: var(--r);
-  border-left: 2px solid var(--cyan); white-space: pre-wrap;
+  margin: 4px 0 12px; font-size: 12px; line-height: 1.6;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px;
 }
-.notes b { color: var(--text); }
+.notes summary {
+  cursor: pointer; padding: 9px 12px; font-weight: 650; color: var(--accent-ink);
+  list-style: none; user-select: none;
+}
+.notes summary::-webkit-details-marker { display: none; }
+.notes summary::after { content: "+"; float: right; color: var(--muted); }
+.notes[open] summary::after { content: "–"; }
+.notes p { margin: 0; padding: 0 12px 10px; color: var(--muted); white-space: pre-wrap; }
 
 /* ---- fields editor ---- */
-details {
-  background: var(--surface); border-radius: var(--r); margin-bottom: 8px;
-  border-left: 2px solid transparent;
+details.sec {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r); margin-bottom: 8px;
 }
-details[open] { border-left-color: var(--violet); }
-details summary {
+details.sec[open] { border-left: 3px solid var(--accent); }
+details.sec summary {
   cursor: pointer; padding: 11px 13px; font-weight: 650; font-size: 13px;
   list-style: none; user-select: none;
 }
-details summary::-webkit-details-marker { display: none; }
-details summary::after { content: "+"; float: right; color: var(--muted); }
-details[open] summary::after { content: "–"; }
-details .body { padding: 0 13px 13px; }
+details.sec summary::-webkit-details-marker { display: none; }
+details.sec summary::after { content: "+"; float: right; color: var(--muted); }
+details.sec[open] summary::after { content: "–"; }
+details.sec .body { padding: 0 13px 13px; }
 .entry { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
 .entry-head { font-weight: 650; font-size: 12.5px; }
 
+/* ---- pdf preview + zoom ---- */
+.zoom { display: flex; align-items: center; gap: 7px; }
+.zoom span { font-size: 11.5px; color: var(--muted); min-width: 36px; text-align: center; }
+.zbtn {
+  width: 26px; height: 26px; padding: 0; border-radius: 7px;
+  background: var(--card); border: 1px solid var(--line); color: var(--text);
+  font-size: 15px; line-height: 1;
+}
+.zbtn:hover { border-color: var(--accent); color: var(--accent-ink); }
+
 .pdf-pages {
-  max-height: 54vh; overflow-y: auto; border: 1px solid var(--line);
-  border-radius: var(--r); padding: 10px; background: var(--surface);
+  max-height: 52vh; overflow: auto; border: 1px solid var(--line);
+  border-radius: var(--r); padding: 10px; background: var(--card);
 }
 .pdf-pages img {
-  display: block; width: 100%; border-radius: 4px; margin-bottom: 10px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  display: block; width: calc(100% * var(--zoom, 1));
+  border: 1px solid var(--line); border-radius: 4px; margin: 0 auto 10px;
+  box-shadow: var(--shadow); cursor: zoom-in;
 }
 .pdf-pages img:last-child { margin-bottom: 0; }
 .pdf-pages .loading { color: var(--muted); text-align: center; padding: 30px 0; }
+#jump-hint { margin: 8px 0 0; }
 
 #tex-area {
-  width: 100%; height: 48vh; margin-top: 0; resize: vertical;
+  width: 100%; height: 46vh; margin-top: 10px; resize: vertical;
   font: 11px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
-  background: var(--surface); color: var(--text);
+  background: var(--card); color: var(--text);
   border: 1px solid var(--line); border-radius: var(--r); padding: 10px;
   white-space: pre; overflow-x: auto;
 }
 
-.oklist, .skiplist { margin-top: 12px; font-size: 12px; line-height: 1.7; }
-.oklist div::before { content: "✓ "; color: var(--ok); }
+/* ---- live fill lists ---- */
+.oklist, .skiplist { margin-top: 12px; font-size: 12px; line-height: 1.8; }
+.oklist div, .skiplist div { animation: pop 0.25s ease both; }
+@keyframes pop { from { opacity: 0; transform: translateX(-4px); } }
+.oklist div::before { content: "✓ "; color: var(--ok); font-weight: 700; }
 .skiplist { margin-top: 8px; }
 .skiplist .head { font-weight: 700; color: var(--warn); }
+.skiplist .head::before { content: ""; }
 .skiplist div:not(.head)::before { content: "· "; color: var(--warn); }
 
 /* ---- error box ---- */
 #error-box {
-  margin: 0 14px 10px; border: 1px solid rgba(255, 114, 132, 0.4);
-  background: rgba(255, 114, 132, 0.07); border-radius: var(--r);
+  margin: 0 14px 10px; border: 1px solid #EFCDD3;
+  background: var(--err-soft); border-radius: var(--r);
   animation: enter 0.2s ease both;
 }
 .error-head {
@@ -238,12 +261,13 @@ details .body { padding: 0 13px 13px; }
 #error-text {
   margin: 6px 0 0; padding: 0 12px 10px; max-height: 150px; overflow: auto;
   font: 11px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
-  color: #f3c3ca; white-space: pre-wrap; word-break: break-word;
+  color: #934554; white-space: pre-wrap; word-break: break-word;
 }
 
 footer {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 18px; border-top: 1px solid var(--line); font-size: 12px;
+  background: var(--card);
 }
 footer a { color: var(--muted); text-decoration: none; }
-footer a:hover { color: var(--text); }
+footer a:hover { color: var(--accent-ink); }
