@@ -75,6 +75,13 @@
         <button id="review-restart" class="linkish">Start over</button>
       </div>
       <p id="review-note" class="muted small"></p>
+      <details id="refine-box" class="notes hidden">
+        <summary><span>Need more changes?</span></summary>
+        <div class="refine-body">
+          <textarea id="refine-text" placeholder="Tell Claude what to refine. Which bullets, projects, or skills to change and how."></textarea>
+          <button id="refine-go" class="primary">Ask Claude</button>
+        </div>
+      </details>
       <details id="claude-notes" class="notes hidden">
         <summary><span>What Claude changed</span><span id="notes-score" class="score"></span></summary>
         <ul id="claude-notes-list"></ul>
@@ -137,8 +144,12 @@
   </div>
 
   <footer>
-    <a href="#" id="open-options">One-time profile</a>
-    <span class="muted small">v0.3</span>
+    <span>
+      <a href="#" id="open-options">One-time profile</a>
+      <span class="muted"> · </span>
+      <a href="#" id="open-tracker">Applications</a>
+    </span>
+    <span class="muted small">v0.4</span>
   </footer>
 
   <script src="panel.js"></script>

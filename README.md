@@ -40,6 +40,16 @@ recognition step is ever needed.
 
 ## Setup
 
+Fastest path, from the repo root:
+
+```bash
+./setup.sh
+```
+
+The script checks prerequisites (Python, Tectonic, Claude Code), builds the
+virtualenv, installs dependencies, and lists exactly which personal pieces
+you still need to add. The sections below cover the same ground by hand.
+
 ### 1. Server
 
 ```bash
@@ -86,6 +96,40 @@ either way.
 
 Everything lives in `config.yaml` at the repo root. The model, the resume
 track names and paths, the downloaded PDF filename, and timeouts.
+
+## Sharing Filla with someone else
+
+Nothing personal is baked into the code. Everything that makes Filla yours
+lives in exactly three places, all gitignored or plainly editable:
+
+1. `config.yaml` carries your GitHub username, your resume track names and
+   paths, and the PDF filename recruiters see.
+2. `server/resumes/` holds your .tex resumes and your rules.md. The rules
+   file is the heart of the system, since it tells Claude what may change,
+   what stays frozen, and how projects get picked from GitHub.
+3. The one-time profile (work authorization, EEO answers) lives only in
+   each person's own browser storage.
+
+So a friend gets their own Filla by cloning the repo, running `./setup.sh`,
+editing `config.yaml`, dropping in their resumes and rules, and loading
+`extension/` unpacked in Chrome. Claude usage rides on their own Claude
+subscription through their own Claude Code login, so nobody shares
+accounts or keys. The honest prerequisites for each person are a Claude
+Pro or Max subscription with Claude Code installed and logged in, Python,
+and Tectonic.
+
+The extension loads unpacked because the Chrome Web Store is built for
+hosted apps, while Filla deliberately keeps everything local to the user's
+machine. If this ever grows beyond friends, publishing to the store with a
+guided first-run setup would be the next step.
+
+## Application tracker
+
+Every tailored resume and every application marked applied is logged to a
+local SQLite database at `server/filla.db`. View it any time at
+http://localhost:8765/tracker, or from the Applications link in the
+panel's footer. The raw data is also served as JSON at /applications for
+anything you want to build on top of it.
 
 ## Notes on usage limits
 

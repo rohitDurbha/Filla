@@ -181,3 +181,7 @@ def revise(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> dict:
 
 def repair(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> str:
     return parse_tex_only(run_claude(prompt, cfg, (log_dir, "repair") if log_dir else None, cancel_id))
+
+
+def refine(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "refine") if log_dir else None, cancel_id))

@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 import claude_client
@@ -42,6 +42,7 @@ dbmod.init(DB_PATH)
 TAILOR_PROMPT = (SERVER / "prompts" / "tailor.md").read_text()
 REVISE_PROMPT = (SERVER / "prompts" / "revise.md").read_text()
 FIX_PROMPT = (SERVER / "prompts" / "fixtex.md").read_text()
+REFINE_PROMPT = (SERVER / "prompts" / "refine.md").read_text()
 
 app = FastAPI(title="Filla server")
 app.add_middleware(
@@ -74,6 +75,12 @@ class ReviseRequest(BaseModel):
 
 class CancelRequest(BaseModel):
     cancel_id: str
+
+
+class RefineRequest(BaseModel):
+    app_id: str
+    instruction: str
+    cancel_id: str = ""
 
 
 class LocateRequest(BaseModel):
@@ -253,6 +260,32 @@ def save_fields(app_id: str, fields: dict):
     return {"ok": True}
 
 
+@app.post("/refine")
+def refine(req: RefineRequest):
+    """Free-form follow-up refinements from the review screen."""
+    d = _run_dir(req.app_id)
+    tex_path = d / "resume.tex"
+    if not tex_path.exists():
+        raise HTTPException(404, "This run has no LaTeX source (own-PDF path).")
+    if not req.instruction.strip():
+        raise HTTPException(400, "Tell Claude what to change first.")
+    rules_path = SERVER / CFG.get("rules_file", "resumes/rules.md")
+    rules = rules_path.read_text() if rules_path.exists() else "(no extra rules)"
+    prompt = REFINE_PROMPT.format(
+        instruction=req.instruction.strip()[:4000],
+        rules=rules,
+        resume_tex=tex_path.read_text(),
+    )
+    try:
+        result = claude_client.refine(prompt, CFG, log_dir=d,
+                                      cancel_id=req.cancel_id or None)
+    except claude_client.ClaudeCancelled:
+        raise HTTPException(409, "Cancelled.")
+    except claude_client.ClaudeError as e:
+        raise HTTPException(502, str(e))
+    return _compile(req.app_id, result["tex"], result["fields"], result["notes"])
+
+
 @app.get("/tex/{app_id}")
 def get_tex(app_id: str):
     d = _run_dir(app_id)
@@ -372,6 +405,65 @@ def status(req: StatusRequest):
 @app.get("/applications")
 def applications():
     return dbmod.list_applications(DB_PATH)
+
+
+@app.get("/tracker")
+def tracker():
+    """The application tracker as a page, at http://localhost:8765/tracker."""
+    import html as h
+
+    rows = dbmod.list_applications(DB_PATH, limit=1000)
+    applied = sum(1 for r in rows if r["status"] == "applied")
+    body = "".join(
+        f"""<tr>
+          <td class="dt">{h.escape((r['created_at'] or '')[:16])}</td>
+          <td class="co">{h.escape(r['company'] or '(unknown)')}</td>
+          <td>{h.escape(r['title'] or '')}</td>
+          <td><span class="pill">{h.escape(r['ats'] or '')}</span></td>
+          <td>{h.escape(r['track'] or '')}</td>
+          <td><span class="st st-{h.escape(r['status'] or 'tailored')}">{h.escape(r['status'] or 'tailored')}</span></td>
+          <td>{f'<a href="{h.escape(r["url"])}" target="_blank">open</a>' if r['url'] else ''}</td>
+        </tr>"""
+        for r in rows
+    )
+    page = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Filla applications</title>
+<style>
+  :root {{ --bg:#F6F6F9; --card:#fff; --text:#17181D; --muted:#7A7F8E;
+          --line:#E8E9F0; --accent:#99A5F2; --soft:#EAEDFD; --ink:#5B67C7; --ok:#4EAE85; }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0; background:var(--bg); color:var(--text);
+         font:15px/1.6 Georgia, 'Times New Roman', serif; }}
+  .wrap {{ max-width:1000px; margin:0 auto; padding:48px 24px 80px; }}
+  .logo {{ font-size:22px; font-weight:800; }}
+  .logo i {{ display:inline-block; width:8px; height:8px; margin-left:3px;
+            border-radius:50%; background:var(--accent); }}
+  h1 {{ font-size:20px; margin:16px 0 4px; }}
+  .sub {{ color:var(--muted); margin:0 0 24px; }}
+  .sub b {{ color:var(--ink); }}
+  table {{ width:100%; border-collapse:collapse; background:var(--card);
+          border:1px solid var(--line); border-radius:14px; overflow:hidden;
+          box-shadow:0 1px 2px rgba(23,24,29,.05), 0 8px 24px rgba(23,24,29,.06); }}
+  th, td {{ text-align:left; padding:10px 14px; border-bottom:1px solid var(--line);
+           font-size:13.5px; }}
+  th {{ color:var(--muted); font-weight:600; background:#FBFBFD; }}
+  tr:last-child td {{ border-bottom:none; }}
+  .dt {{ color:var(--muted); white-space:nowrap; }}
+  .co {{ font-weight:700; }}
+  .pill {{ background:var(--soft); color:var(--ink); border-radius:99px;
+          padding:1px 9px; font-size:11.5px; text-transform:capitalize; }}
+  .st {{ border-radius:99px; padding:1px 9px; font-size:11.5px; }}
+  .st-applied {{ background:#E4F4EC; color:#2E7D5B; }}
+  .st-tailored {{ background:#FBF3E4; color:#8A6A2B; }}
+  a {{ color:var(--ink); }}
+  .empty {{ padding:48px; text-align:center; color:var(--muted); }}
+</style></head><body><div class="wrap">
+<div class="logo">Filla<i></i></div>
+<h1>Applications</h1>
+<p class="sub"><b>{applied}</b> applied of <b>{len(rows)}</b> tailored</p>
+{'<table><tr><th>When</th><th>Company</th><th>Role</th><th>ATS</th><th>Track</th><th>Status</th><th></th></tr>' + body + '</table>' if rows else '<div class="empty">Nothing yet. Tailor your first resume and it will show up here.</div>'}
+</div></body></html>"""
+    return HTMLResponse(page)
 
 
 if __name__ == "__main__":

@@ -276,6 +276,13 @@ function enterReview(out) {
     ? "Extracted from your PDF without any AI. Fix anything it missed, then continue."
     : "Everything below comes from the tailored resume. Edits are written back into the LaTeX before the final PDF.";
   const notes = $("claude-notes");
+  const refine = $("refine-box");
+  if (state.source === "claude") {
+    refine.classList.remove("hidden");
+    refine.open = false;
+  } else {
+    refine.classList.add("hidden");
+  }
   if (state.source === "claude" && out.notes) {
     renderNotes(out.notes);
     notes.classList.remove("hidden");
@@ -319,6 +326,27 @@ function renderNotes(text) {
 
 $("review-restart").addEventListener("click", resetFlow);
 $("fill-restart").addEventListener("click", resetFlow);
+
+$("refine-go").addEventListener("click", async () => {
+  const instruction = $("refine-text").value.trim();
+  if (!instruction) return;
+  const signal = startBusy("review", "Claude is applying your refinements…");
+  try {
+    const out = await api("/refine", {
+      app_id: state.appId, instruction, cancel_id: state.cancelId,
+    }, signal);
+    $("refine-text").value = "";
+    state.fields = out.fields;
+    state.dirty = false;
+    if (out.notes) renderNotes(out.notes);
+    renderEditor(out.fields);
+    show("review");
+    $("claude-notes").open = true;
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    renderEditor(state.fields); show("review"); fail(e);
+  }
+});
 
 function inp(label, value, onchange, textarea = false) {
   const wrap = document.createElement("label");
@@ -631,6 +659,9 @@ $("done").addEventListener("click", async () => {
 $("recheck").addEventListener("click", detectJob);
 $("open-options").addEventListener("click", (e) => {
   e.preventDefault(); chrome.runtime.openOptionsPage();
+});
+$("open-tracker").addEventListener("click", (e) => {
+  e.preventDefault(); chrome.tabs.create({ url: SERVER + "/tracker" });
 });
 // Re-detect on tab switches only when the flow is idle. Mid-flow views
 // (tailoring, review, final, fill) must survive the user tabbing away.

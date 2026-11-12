@@ -217,6 +217,9 @@ body.dropping::after {
 .notes ul { margin: 0; padding: 0 14px 12px 28px; color: var(--muted); }
 .notes li { margin: 3px 0 7px; }
 .notes li::marker { color: var(--accent); }
+.refine-body { padding: 0 12px 12px; }
+.refine-body textarea { min-height: 72px; margin-top: 2px; }
+.refine-body .primary { margin-top: 10px; }
 
 /* ---- fields editor ---- */
 details.sec {
