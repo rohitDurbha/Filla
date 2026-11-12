@@ -94,6 +94,14 @@ header {
 }
 .stages li.active span { color: var(--text); font-weight: 650; }
 
+.banner {
+  margin: 0 18px 10px; padding: 9px 13px; font-size: 12.5px;
+  background: var(--accent-soft); color: var(--accent-ink);
+  border-radius: 10px; display: flex; align-items: center; gap: 8px;
+  justify-content: space-between;
+}
+.banner .linkish { color: var(--accent-ink); font-weight: 700; }
+
 main { flex: 1; position: relative; }
 
 .view { padding: 6px 18px 18px; animation: enter 0.22s ease both; }

@@ -20,6 +20,7 @@ from __future__ import annotations
 import atexit
 import json
 import re
+import shutil
 import subprocess
 
 
@@ -71,8 +72,11 @@ def run_claude(prompt: str, cfg: dict, log: tuple | None = None,
     if log:
         log_dir, name = log
         (log_dir / f"{name}.prompt.txt").write_text(prompt)
+    # shutil.which resolves Windows shims like claude.cmd, which Popen
+    # cannot find from a bare name without a shell.
+    exe = shutil.which(ccfg.get("command", "claude")) or ccfg.get("command", "claude")
     cmd = [
-        ccfg.get("command", "claude"),
+        exe,
         "-p",
         "--model", ccfg.get("model", "sonnet"),
         "--output-format", "json",

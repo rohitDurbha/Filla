@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Set up Filla</title>
+  <style>
+    @font-face {
+      font-family: "Geist Serif";
+      src: url("../fonts/GeistSerifVF.woff2") format("woff2");
+      font-weight: 400; font-display: swap;
+    }
+    @font-face {
+      font-family: "Geist Serif Triangle";
+      src: url("../fonts/GeistSerif-Triangle.woff2") format("woff2");
+      font-weight: 400; font-display: swap;
+    }
+    :root {
+      --bg: #F6F6F9; --card: #FFFFFF; --line: #E8E9F0;
+      --text: #17181D; --muted: #7A7F8E;
+      --accent: #99A5F2; --accent-soft: #EAEDFD; --accent-ink: #5B67C7;
+      --ok: #4EAE85; --err: #C25B6B;
+      --shadow: 0 1px 2px rgba(23,24,29,0.05), 0 8px 24px rgba(23,24,29,0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text); min-height: 100vh;
+      font: 14.5px/1.6 "Geist Serif", Georgia, serif;
+    }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 48px 24px 90px; }
+    .logo {
+      font-family: "Geist Serif Triangle", Georgia, serif;
+      font-size: 24px; font-weight: 700;
+    }
+    .logo i { display: inline-block; width: 8px; height: 8px; margin-left: 3px;
+              border-radius: 50%; background: var(--accent); }
+    .dots { display: flex; gap: 8px; margin: 22px 0 26px; }
+    .dots i {
+      width: 30px; height: 4px; border-radius: 2px; background: var(--line);
+      transition: background 0.3s;
+    }
+    .dots i.on { background: var(--accent); }
+    h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: -0.3px; }
+    p.lead { color: var(--muted); margin: 0 0 22px; max-width: 54ch; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow);
+    }
+    .check { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+    .check .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+    .check.ok .dot { background: var(--ok); }
+    .check.bad .dot { background: var(--err); }
+    .check small { color: var(--muted); margin-left: auto; text-align: right; max-width: 55%; }
+    label { display: block; margin-top: 14px; font-weight: 600; font-size: 13px; }
+    input[type=text], textarea, select {
+      width: 100%; margin-top: 6px; padding: 9px 11px; font-size: 13.5px;
+      background: var(--bg); color: var(--text); font-family: inherit;
+      border: 1px solid var(--line); border-radius: 9px;
+    }
+    textarea { min-height: 130px; resize: vertical; }
+    textarea.tex { font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre; }
+    input:focus, textarea:focus, select:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 5px; }
+    .trackcard .rowtop { display: flex; gap: 10px; align-items: flex-end; }
+    .trackcard .rowtop label { flex: 1; margin-top: 0; }
+    .filebtn {
+      background: var(--card); border: 1px solid var(--line); color: var(--muted);
+      border-radius: 9px; padding: 9px 13px; font-size: 12.5px; cursor: pointer;
+      font-family: inherit; white-space: nowrap;
+    }
+    .filebtn:hover { color: var(--text); border-color: #CDD0DC; }
+    .nav { display: flex; gap: 10px; margin-top: 22px; }
+    button.primary {
+      flex: 1; padding: 13px; font-size: 15px; font-weight: 700; color: #fff;
+      background: var(--text); border: none; border-radius: 11px; cursor: pointer;
+      font-family: inherit; box-shadow: var(--shadow);
+      transition: transform 0.12s, box-shadow 0.2s, opacity 0.15s;
+    }
+    button.primary:hover { transform: translateY(-1px); }
+    button.primary:disabled { opacity: 0.45; cursor: default; transform: none; }
+    button.ghost {
+      padding: 13px 20px; background: var(--card); color: var(--muted);
+      border: 1px solid var(--line); border-radius: 11px; cursor: pointer;
+      font-family: inherit; font-size: 14px; font-weight: 600;
+    }
+    button.ghost:hover { color: var(--text); }
+    .linkish { background: none; border: none; color: var(--accent-ink);
+               cursor: pointer; font-family: inherit; font-size: 12.5px; padding: 0; }
+    .step { animation: enter 0.25s ease both; }
+    @keyframes enter { from { opacity: 0; transform: translateY(8px); } }
+    .hidden { display: none !important; }
+    .error { color: var(--err); font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .done-mark { font-size: 40px; color: var(--ok); margin-bottom: 10px; }
+    code { background: var(--accent-soft); color: var(--accent-ink);
+           padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">Filla<i></i></div>
+    <div class="dots" id="dots"></div>
+
+    <!-- Step 0: environment -->
+    <section class="step" data-step="0">
+      <h1>Welcome to Filla</h1>
+      <p class="lead">Filla tailors your resume with your own Claude for every
+      job, then fills the application. Setup takes about five minutes, all on
+      this page. First, start the engine.</p>
+      <div class="card">
+        <p style="margin:0 0 10px">In the Filla folder you downloaded, double-click
+        <code>start-mac.command</code> on Mac or <code>start-windows.bat</code> on
+        Windows, and keep that window open. Then check below.</p>
+        <div class="check" id="chk-server"><span class="dot"></span>Local server
+          <small>starts with the double-click</small></div>
+        <div class="check" id="chk-tectonic"><span class="dot"></span>Tectonic
+          <small>LaTeX compiler, brew install tectonic</small></div>
+        <div class="check" id="chk-claude"><span class="dot"></span>Claude Code
+          <small>installed and logged in with your Claude account</small></div>
+      </div>
+      <div class="nav">
+        <button class="ghost" id="recheck">Check again</button>
+        <button class="primary" id="next0" disabled>Continue</button>
+      </div>
+    </section>
+
+    <!-- Step 1: about you -->
+    <section class="step hidden" data-step="1">
+      <h1>About you</h1>
+      <p class="lead">Filla reads your public GitHub so Claude can pick your
+      most relevant projects for each job.</p>
+      <div class="card">
+        <label>GitHub username
+          <input type="text" id="gh-user" placeholder="octocat" />
+        </label>
+        <label>Resume filename recruiters will see
+          <input type="text" id="pdf-name" placeholder="First_Last_Resume.pdf" />
+        </label>
+      </div>
+      <div class="nav">
+        <button class="ghost" data-back>Back</button>
+        <button class="primary" data-next>Continue</button>
+      </div>
+      <div class="error" id="err-1"></div>
+    </section>
+
+    <!-- Step 2: resume tracks -->
+    <section class="step hidden" data-step="2">
+      <h1>Your resume tracks</h1>
+      <p class="lead">A track is one base resume you apply with, like Data
+      Science or Software Engineering. Paste the LaTeX source of each, or
+      upload the .tex file.</p>
+      <label style="margin-top:0">How many tracks?
+        <select id="track-count">
+          <option>1</option><option>2</option><option selected>3</option>
+          <option>4</option><option>5</option><option>6</option>
+        </select>
+      </label>
+      <div id="tracks" style="margin-top:14px"></div>
+      <div class="nav">
+        <button class="ghost" data-back>Back</button>
+        <button class="primary" data-next>Continue</button>
+      </div>
+      <div class="error" id="err-2"></div>
+    </section>
+
+    <!-- Step 3: rules -->
+    <section class="step hidden" data-step="3">
+      <h1>Your rules for Claude</h1>
+      <p class="lead">These rules drive every tailoring run. Say what Claude
+      may rewrite, what stays frozen, how projects get picked, and any layout
+      limits. The better the rules, the better the resumes.
+      <button class="linkish" id="rules-template">Insert a starter template</button></p>
+      <div class="card">
+        <textarea id="rules" placeholder="Write your tailoring rules here..."
+                  style="min-height:260px"></textarea>
+      </div>
+      <div class="nav">
+        <button class="ghost" data-back>Back</button>
+        <button class="primary" data-next>Continue</button>
+      </div>
+      <div class="error" id="err-3"></div>
+    </section>
+
+    <!-- Step 4: application answers -->
+    <section class="step hidden" data-step="4">
+      <h1>One-time application answers</h1>
+      <p class="lead">US applications ask these on nearly every form and they
+      never appear on a resume. Answered once, filled everywhere. Stored only
+      in your browser. Picking Skip leaves the question untouched.</p>
+      <div class="card">
+        <label>Gender
+          <select id="gender"><option value="">Skip this question</option>
+            <option value="male">Male</option><option value="female">Female</option>
+            <option value="nonbinary">Non-binary</option>
+            <option value="decline">Decline to self-identify</option></select>
+        </label>
+        <label>Are you Hispanic or Latino?
+          <select id="hispanic_latino"><option value="">Skip this question</option>
+            <option value="yes">Yes</option><option value="no">No</option>
+            <option value="decline">Decline to self-identify</option></select>
+        </label>
+        <label>Race
+          <select id="race"><option value="">Skip this question</option>
+            <option value="american_indian">American Indian or Alaska Native</option>
+            <option value="asian">Asian</option>
+            <option value="black">Black or African American</option>
+            <option value="hispanic">Hispanic or Latino</option>
+            <option value="pacific_islander">Native Hawaiian or Other Pacific Islander</option>
+            <option value="white">White</option>
+            <option value="two_or_more">Two or More Races</option>
+            <option value="decline">Decline to self-identify</option></select>
+        </label>
+        <label>Protected veteran status
+          <select id="veteran"><option value="">Skip this question</option>
+            <option value="not_protected">I am not a protected veteran</option>
+            <option value="protected">I identify as one or more classes of protected veteran</option>
+            <option value="decline">I do not wish to answer</option></select>
+        </label>
+        <label>Disability status
+          <select id="disability"><option value="">Skip this question</option>
+            <option value="yes">Yes, I have a disability (or previously had one)</option>
+            <option value="no">No, I do not have a disability</option>
+            <option value="decline">I do not want to answer</option></select>
+        </label>
+        <label>Are you legally authorized to work in the United States?
+          <select id="work_authorized"><option value="">Skip this question</option>
+            <option value="yes">Yes</option><option value="no">No</option></select>
+        </label>
+        <label>Will you now or in the future require sponsorship?
+          <select id="requires_sponsorship"><option value="">Skip this question</option>
+            <option value="yes">Yes</option><option value="no">No</option></select>
+        </label>
+      </div>
+      <div class="nav">
+        <button class="ghost" data-back>Back</button>
+        <button class="primary" id="finish">Start Filla</button>
+      </div>
+      <div class="error" id="err-4"></div>
+    </section>
+
+    <!-- Step 5: done -->
+    <section class="step hidden" data-step="5">
+      <div class="done-mark">✓</div>
+      <h1>Filla is ready</h1>
+      <p class="lead">Open a job posting on Greenhouse, Lever, Ashby, or
+      SmartRecruiters and click the F chip on the right edge of the page.
+      Keep the server window open while you apply. Your application history
+      lives at <a href="http://localhost:8765/tracker" target="_blank">localhost:8765/tracker</a>.</p>
+    </section>
+  </div>
+  <script src="setup.js"></script>
+</body>
+</html>

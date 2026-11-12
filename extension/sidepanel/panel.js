@@ -124,9 +124,11 @@ async function checkServer() {
     const h = await api("/health");
     $("server-dot").classList.add("ok");
     $("server-label").textContent = h.tectonic ? "ready" : "no tectonic";
+    $("setup-banner").classList.toggle("hidden", h.configured !== false);
     state.tracks = h.tracks;
     state.pdfFilename = h.pdf_filename;
     const sel = $("track");
+    if (sel.options.length !== Object.keys(h.tracks).length) sel.innerHTML = "";
     if (!sel.options.length) {
       for (const [key, name] of Object.entries(h.tracks)) {
         const o = document.createElement("option");
@@ -662,6 +664,9 @@ $("open-options").addEventListener("click", (e) => {
 });
 $("open-tracker").addEventListener("click", (e) => {
   e.preventDefault(); chrome.tabs.create({ url: SERVER + "/tracker" });
+});
+$("open-setup").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("setup/setup.html") });
 });
 // Re-detect on tab switches only when the flow is idle. Mid-flow views
 // (tailoring, review, final, fill) must survive the user tabbing away.

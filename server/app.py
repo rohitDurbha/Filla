@@ -160,14 +160,78 @@ def _compile(app_id: str, tex: str, fields: dict, notes: str,
             "pdf_url": f"/pdf/{app_id}"}
 
 
+def _is_configured() -> bool:
+    tracks = CFG.get("tracks") or {}
+    if not tracks:
+        return False
+    rules = SERVER / CFG.get("rules_file", "resumes/rules.md")
+    return rules.exists() and all(
+        (SERVER / t["resume"]).exists() for t in tracks.values()
+    )
+
+
 @app.get("/health")
 def health():
     return {
         "ok": True,
         "tectonic": latex.tectonic_available(),
-        "tracks": {k: v["name"] for k, v in CFG["tracks"].items()},
+        "claude": shutil.which((CFG.get("claude") or {}).get("command", "claude")) is not None,
+        "configured": _is_configured(),
+        "tracks": {k: v["name"] for k, v in (CFG.get("tracks") or {}).items()},
         "pdf_filename": CFG.get("pdf_filename", "resume.pdf"),
     }
+
+
+class SetupTrack(BaseModel):
+    name: str
+    tex: str
+
+
+class SetupRequest(BaseModel):
+    github_username: str = ""
+    pdf_filename: str = "resume.pdf"
+    tracks: list[SetupTrack]
+    rules: str
+
+
+@app.post("/setup")
+def setup(req: SetupRequest):
+    """First-run wizard: receives everything personal from the extension
+    and writes config, resumes, and rules, no terminal needed."""
+    if not req.tracks:
+        raise HTTPException(400, "Add at least one resume track.")
+    if not req.rules.strip():
+        raise HTTPException(400, "Rules cannot be empty, they drive the tailoring.")
+
+    resumes_dir = SERVER / "resumes"
+    resumes_dir.mkdir(exist_ok=True)
+
+    tracks_cfg = {}
+    for i, t in enumerate(req.tracks):
+        if not t.name.strip() or not t.tex.strip():
+            raise HTTPException(400, f"Track {i + 1} needs both a name and its LaTeX.")
+        key = re.sub(r"[^a-z0-9]+", "_", t.name.lower()).strip("_")[:24] or f"track{i + 1}"
+        base = key
+        n = 2
+        while key in tracks_cfg:
+            key = f"{base}{n}"
+            n += 1
+        (resumes_dir / f"{key}.tex").write_text(t.tex)
+        tracks_cfg[key] = {"name": t.name.strip(), "resume": f"resumes/{key}.tex"}
+
+    (resumes_dir / "rules.md").write_text(req.rules)
+
+    CFG["tracks"] = tracks_cfg
+    CFG["rules_file"] = "resumes/rules.md"
+    CFG["pdf_filename"] = (req.pdf_filename or "resume.pdf").strip()
+    CFG.setdefault("github", {})["username"] = req.github_username.strip()
+    (ROOT / "config.yaml").write_text(yaml.safe_dump(CFG, sort_keys=False))
+    # Invalidate the GitHub cache so the new username takes effect at once.
+    cache = SERVER / "github_cache.json"
+    if cache.exists():
+        cache.unlink()
+
+    return {"ok": True, "tracks": {k: v["name"] for k, v in tracks_cfg.items()}}
 
 
 @app.post("/tailor")

@@ -110,13 +110,23 @@ lives in exactly three places, all gitignored or plainly editable:
 3. The one-time profile (work authorization, EEO answers) lives only in
    each person's own browser storage.
 
-So a friend gets their own Filla by cloning the repo, running `./setup.sh`,
-editing `config.yaml`, dropping in their resumes and rules, and loading
-`extension/` unpacked in Chrome. Claude usage rides on their own Claude
-subscription through their own Claude Code login, so nobody shares
-accounts or keys. The honest prerequisites for each person are a Claude
-Pro or Max subscription with Claude Code installed and logged in, Python,
-and Tectonic.
+A friend gets their own Filla with no terminal and no file editing:
+
+1. Download the repo (Code, Download ZIP works fine) and install the three
+   prerequisites once: Python, Tectonic, and Claude Code logged in with
+   their own Claude account.
+2. Double-click `start-mac.command` (Mac) or `start-windows.bat` (Windows)
+   and keep the window open. First run installs everything it needs.
+3. Load `extension/` unpacked at chrome://extensions. The setup wizard
+   opens by itself: it checks the environment live, then collects their
+   GitHub username, resume tracks (paste or upload each .tex), tailoring
+   rules (a starter template is one click away), and the one-time
+   application answers, and writes it all to their server on Start.
+
+Claude usage rides on each person's own subscription through their own
+Claude Code login, so nobody shares accounts or keys. The server is plain
+Python with portable paths, and both Tectonic and Claude Code ship Windows
+builds, so Mac and Windows both work.
 
 The extension loads unpacked because the Chrome Web Store is built for
 hosted apps, while Filla deliberately keeps everything local to the user's
