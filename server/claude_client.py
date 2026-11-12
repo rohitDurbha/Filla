@@ -17,6 +17,7 @@ of raw JSON, because a full LaTeX document inside a JSON string is fragile.
 
 from __future__ import annotations
 
+import atexit
 import json
 import re
 import subprocess
@@ -34,6 +35,16 @@ class ClaudeCancelled(ClaudeError):
 # actually kill the process instead of letting it finish and spend usage.
 _running: dict[str, subprocess.Popen] = {}
 _cancelled: set[str] = set()
+
+
+@atexit.register
+def _kill_orphans():
+    """Server shutdown must not leave claude -p processes running."""
+    for proc in list(_running.values()):
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
 
 def cancel(cancel_id: str) -> bool:

@@ -64,8 +64,14 @@ Drop your files into `server/resumes/` as described in the README there
 (four .tex resumes plus rules.md), then start the server.
 
 ```bash
-python app.py
+./run.sh
 ```
+
+The script frees port 8765 if an old server still holds it, activates the
+virtualenv, and runs with auto-reload, so code changes and git pulls apply
+without restarting. Stop with Ctrl+C. Avoid Ctrl+Z, which suspends the
+process and keeps the port, though run.sh clears that up on the next start
+either way.
 
 ### 2. Extension
 
