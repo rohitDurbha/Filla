@@ -66,18 +66,25 @@ async function getTab() {
 }
 
 const CONTENT_FILES = ["content/adapters.js", "content/autofill.js", "content/detector.js"];
+const CONTENT_VERSION = 2;
 
-// Self-heal: after an extension reload, pages keep orphaned content scripts
-// and messaging fails with "Receiving end does not exist". Re-inject and retry.
+// Self-heal: after an extension reload, pages keep orphaned or outdated
+// content scripts. On a dead connection or an old version, inject the
+// current bundle (its generation guard silences stale copies) and retry.
 async function sendToTab(message) {
   const tab = await getTab();
   if (!tab?.id) throw new Error("No active tab.");
+  let needsInject = false;
   try {
-    return await chrome.tabs.sendMessage(tab.id, message);
-  } catch (e) {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: CONTENT_FILES });
-    return await chrome.tabs.sendMessage(tab.id, message);
+    const pong = await chrome.tabs.sendMessage(tab.id, { action: "ping" });
+    if ((pong?.v || 0) < CONTENT_VERSION) needsInject = true;
+  } catch {
+    needsInject = true;
   }
+  if (needsInject) {
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: CONTENT_FILES });
+  }
+  return await chrome.tabs.sendMessage(tab.id, message);
 }
 
 // ---------- cancellable busy state ----------
@@ -504,19 +511,27 @@ $("pdf-approve").addEventListener("click", async () => {
   }
   show("fill");
   $("fill-ok").innerHTML = "";
+  $("fill-check").innerHTML = "";
   $("fill-skip").innerHTML = "";
   $("fill-summary").classList.add("hidden");
 });
 
 // ---------- autofill, with a live follow-along feed ----------
 
+const FILL_BUCKETS = {
+  filled: { id: "fill-ok", head: null },
+  check: { id: "fill-check", head: "Set these, double-check them" },
+  skipped: { id: "fill-skip", head: "Still needs you" },
+};
+
 chrome.runtime.onMessage.addListener((m) => {
-  if (m?.filla !== "fill_progress" || m.status === "done") return;
-  const box = m.status === "filled" ? $("fill-ok") : $("fill-skip");
-  if (m.status === "skipped" && !box.querySelector(".head")) {
+  if (m?.filla !== "fill_progress" || m.status === "done" || !m.label) return;
+  const bucket = FILL_BUCKETS[m.status] || FILL_BUCKETS.skipped;
+  const box = $(bucket.id);
+  if (bucket.head && !box.querySelector(".head")) {
     const h = document.createElement("div");
     h.className = "head";
-    h.textContent = "Still needs you";
+    h.textContent = bucket.head;
     box.appendChild(h);
   }
   if ([...box.children].some((c) => c.textContent === m.label)) return;
@@ -539,6 +554,7 @@ $("fill").addEventListener("click", async () => {
   const { eeoProfile } = await chrome.storage.local.get("eeoProfile");
   $("fill").disabled = true;
   $("fill-ok").innerHTML = "";
+  $("fill-check").innerHTML = "";
   $("fill-skip").innerHTML = "";
   try {
     // The panel fetches the PDF (its origin is allowed by the server) and

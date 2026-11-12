@@ -1,11 +1,19 @@
 // Filla content-script entry point. Answers the panel's messages.
+// A generation guard lets a newer injected copy supersede this one without
+// a page reload: stale copies go silent instead of answering first.
 
 (() => {
+  const FILLA_CONTENT_VERSION = 2;
+  window.__fillaGen = (window.__fillaGen || 0) + 1;
+  const MY_GEN = window.__fillaGen;
+
   const adapter = FillaAdapters.detect();
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (window.__fillaGen !== MY_GEN) return; // a newer copy owns this page
+
     if (msg.action === "ping") {
-      sendResponse({ pong: true });
+      sendResponse({ pong: true, v: FILLA_CONTENT_VERSION });
       return;
     }
 

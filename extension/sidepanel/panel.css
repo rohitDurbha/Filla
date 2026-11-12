@@ -188,8 +188,8 @@ body.dropping::after {
 }
 .sk {
   height: 7px; border-radius: 4px; margin-bottom: 8px;
-  background: linear-gradient(90deg, #ECEDF4 25%, var(--accent-soft) 50%, #ECEDF4 75%);
-  background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
+  background: linear-gradient(90deg, #E7E9F1 30%, #C3CCF8 50%, #E7E9F1 70%);
+  background-size: 200% 100%; animation: shimmer 1.3s linear infinite;
 }
 .sk.gap { margin-top: 16px; }
 .w30 { width: 30%; } .w40 { width: 40%; } .w75 { width: 75%; } .w80 { width: 80%; }
@@ -261,13 +261,15 @@ details.sec .body { padding: 0 13px 13px; }
 }
 
 /* ---- live fill lists ---- */
-.oklist, .skiplist { margin-top: 12px; font-size: 12px; line-height: 1.8; }
-.oklist div, .skiplist div { animation: pop 0.25s ease both; }
+.oklist, .checklist, .skiplist { margin-top: 10px; font-size: 12.5px; line-height: 1.8; }
+.oklist div, .checklist div, .skiplist div { animation: pop 0.25s ease both; }
 @keyframes pop { from { opacity: 0; transform: translateX(-4px); } }
 .oklist div::before { content: "✓ "; color: var(--ok); font-weight: 700; }
-.skiplist { margin-top: 8px; }
-.skiplist .head { font-weight: 700; color: var(--warn); }
-.skiplist .head::before { content: ""; }
+.checklist .head, .skiplist .head { font-weight: 700; }
+.checklist .head { color: var(--accent-ink); }
+.checklist .head::before, .skiplist .head::before { content: ""; }
+.checklist div:not(.head)::before { content: "◦ "; color: var(--accent-ink); font-weight: 700; }
+.skiplist .head { color: var(--warn); }
 .skiplist div:not(.head)::before { content: "· "; color: var(--warn); }
 
 /* ---- error box ---- */

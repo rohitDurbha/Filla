@@ -1,8 +1,9 @@
-// Filla autofill engine.
-// Fills sequentially, scrolling to each field and flashing it as it fills,
-// so the user can follow along on the page while the panel shows a live
-// list. Strategy per field: adapter selector hints first, then generic
-// label matching, React-safe value setting throughout.
+// Filla autofill engine, v2.
+// Fills sequentially, scrolling to each field and flashing it so the user
+// can follow along. Honesty rules: a field is reported "filled" only after
+// its state is verified (checked flag flipped, value present); actions
+// whose effect cannot be verified report "check" instead. Labels shown to
+// the user are human text, never the internal matching string.
 
 const FillaFill = (() => {
   // ---------- low-level helpers ----------
@@ -30,21 +31,9 @@ const FillaFill = (() => {
     return (s || "").toLowerCase().replace(/\s+/g, " ").replace(/[*:]/g, "").trim();
   }
 
-  // Strip machine noise (uuids, system field ids) so labels read as humans
-  // wrote them.
-  function cleanLabel(s) {
-    const out = (s || "")
-      .replace(/\b[0-9a-f]{6,}\b/gi, "")
-      .replace(/\b[0-9a-f]{4,}-[0-9a-f-]{4,}\b/gi, "")
-      .replace(/\bsystem\s*field\w*\b/gi, "")
-      .replace(/_{2,}/g, " ")
-      .replace(/\s{2,}/g, " ")
-      .replace(/[|,]\s*$/g, "")
-      .trim();
-    return out.length >= 3 ? out : "";
-  }
-
-  function labelFor(el) {
+  // The concatenated matching string: label + aria + name + placeholder.
+  // Good for regex matching, never shown to the user.
+  function matchText(el) {
     const bits = [];
     if (el.id) {
       const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
@@ -69,6 +58,57 @@ const FillaFill = (() => {
     return norm(bits.join(" | "));
   }
 
+  // Human display name: first meaningful label source, scrubbed of ids,
+  // placeholders, and system noise.
+  function scrub(s) {
+    if (!s) return "";
+    let out = s
+      .replace(/\b[0-9a-f]{6,}\b/gi, "")
+      .replace(/\b[0-9a-f]{2,}(?:-[0-9a-f]{2,}){2,}\b/gi, "")
+      .replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{3,}\b/gi, "")
+      .replace(/system\s*_?field\w*/gi, "")
+      .replace(/type here\.*/gi, "")
+      .replace(/\.{3,}|…/g, "")
+      .replace(/[_|]+/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[\s\-–—·,.:]+|[\s\-–—·,.:*]+$/g, "")
+      .trim();
+    if (out.length < 3) return "";
+    if (/\d/.test(out) && /^[\da-f\s-]+$/i.test(out)) return "";
+    return out[0].toUpperCase() + out.slice(1);
+  }
+
+  const EEO_NAMES = {
+    gender: "Gender",
+    hispanic_latino: "Hispanic or Latino",
+    race: "Race",
+    veteran: "Veteran status",
+    disability: "Disability status",
+    work_authorized: "Work authorization",
+    requires_sponsorship: "Visa sponsorship",
+  };
+
+  function prettyName(el, rule) {
+    if (rule?.eeo) return EEO_NAMES[rule.eeo];
+    const cands = [];
+    if (el?.id) {
+      const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (l) cands.push(l.textContent);
+    }
+    const wrap = el?.closest("label");
+    if (wrap) cands.push(wrap.textContent);
+    cands.push(el?.getAttribute("aria-label"));
+    const legend = el?.closest("fieldset")?.querySelector("legend");
+    if (legend) cands.push(legend.textContent);
+    cands.push((el?.name || "").replace(/[\[\]_-]+/g, " "));
+    cands.push(el?.placeholder);
+    for (const c of cands) {
+      const s = scrub(c);
+      if (s) return s.slice(0, 48);
+    }
+    return "Field";
+  }
+
   function fuzzyPickOption(options, wanted) {
     for (const w of wanted) {
       const hit = options.find((o) => norm(o.label).includes(w));
@@ -81,6 +121,7 @@ const FillaFill = (() => {
 
   let styleInjected = false;
   function flash(el) {
+    if (!el || !el.classList) return;
     if (!styleInjected) {
       const st = document.createElement("style");
       st.textContent = `
@@ -93,7 +134,7 @@ const FillaFill = (() => {
       document.documentElement.appendChild(st);
       styleInjected = true;
     }
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
     el.classList.add("filla-flash");
     setTimeout(() => el.classList.remove("filla-flash"), 1200);
   }
@@ -116,8 +157,8 @@ const FillaFill = (() => {
       decline: ["decline", "don't wish", "do not wish", "prefer not"],
     },
     hispanic_latino: {
-      yes: ["yes"],
-      no: ["no"],
+      yes: ["yes", "hispanic or latino"],
+      no: ["no", "not hispanic"],
       decline: ["decline", "don't wish", "do not wish", "prefer not"],
     },
     race: {
@@ -136,8 +177,8 @@ const FillaFill = (() => {
       decline: ["decline", "don't wish", "do not wish", "prefer not"],
     },
     disability: {
-      yes: ["yes, i have"],
-      no: ["no, i do not", "no, i don't"],
+      yes: ["yes, i have", "yes i have"],
+      no: ["no, i do not", "no, i don't", "no i do not"],
       decline: ["do not want to answer", "don't wish", "decline", "prefer not"],
     },
     work_authorized: { yes: ["yes"], no: ["no"] },
@@ -152,31 +193,57 @@ const FillaFill = (() => {
       p.full_name || [p.first_name, p.last_name].filter(Boolean).join(" ");
 
     return [
-      { re: /first\s*name|given\s*name/, value: p.first_name },
-      { re: /last\s*name|family\s*name|surname/, value: p.last_name },
-      { re: /full\s*name|your\s*name|^name\b/, value: fullName },
-      { re: /e-?mail/, value: p.email },
-      { re: /phone|mobile/, value: p.phone },
-      { re: /location|city|address/, value: p.location },
-      { re: /linked\s?in/, value: p.linkedin },
-      { re: /git\s?hub/, value: p.github },
-      { re: /portfolio|website|personal\s*site/, value: p.website || p.github },
-      { re: /current\s*company|employer|organization|^company\b/, value: exp0.company },
-      { re: /current\s*(job\s*)?title|current\s*role/, value: exp0.role },
-      { re: /school|university|college|institution/, value: edu0.school },
-      { re: /degree/, value: edu0.degree },
-      { re: /gpa/, value: edu0.gpa },
+      { re: /first\s*name|given\s*name/, value: p.first_name, name: "First name" },
+      { re: /last\s*name|family\s*name|surname/, value: p.last_name, name: "Last name" },
+      { re: /full\s*name|your\s*name|^name\b/, value: fullName, name: "Name" },
+      { re: /e-?mail/, value: p.email, name: "Email" },
+      { re: /phone|mobile/, value: p.phone, name: "Phone" },
+      { re: /location|city|address/, value: p.location, name: "Location" },
+      { re: /linked\s?in/, value: p.linkedin, name: "LinkedIn" },
+      { re: /git\s?hub/, value: p.github, name: "GitHub" },
+      { re: /portfolio|website|personal\s*site/, value: p.website || p.github, name: "Website" },
+      { re: /current\s*company|employer|organization|^company\b/, value: exp0.company, name: "Current company" },
+      { re: /current\s*(job\s*)?title|current\s*role/, value: exp0.role, name: "Current title" },
+      { re: /school|university|college|institution/, value: edu0.school, name: "School" },
+      { re: /degree/, value: edu0.degree, name: "Degree" },
+      { re: /gpa/, value: edu0.gpa, name: "GPA" },
       { re: /gender(?!\s*identity\s*option)/, eeo: "gender" },
       { re: /hispanic|latino|latinx|ethnicit/, eeo: "hispanic_latino" },
       { re: /\brace\b/, eeo: "race" },
       { re: /veteran/, eeo: "veteran" },
       { re: /disabilit/, eeo: "disability" },
-      { re: /authoriz.*work|legally.*work|eligible.*work/, eeo: "work_authorized" },
-      { re: /sponsorship|sponsor.*(now|future|visa)|require.*visa/, eeo: "requires_sponsorship" },
+      { re: /authoriz\w*\s*(to\s*)?work|legally\s*\w*\s*work|eligible\s*to\s*work/, eeo: "work_authorized" },
+      { re: /sponsorship|sponsor\w*\s*(now|in|for|a|an)?\s*(the\s*)?(future|visa|employment)|require\w*\s*(a\s*)?visa/, eeo: "requires_sponsorship" },
     ];
   }
 
-  // ---------- fillers ----------
+  // ---------- verified interactions ----------
+
+  // Radios are usually hidden inputs behind styled labels; React apps listen
+  // on the label. Click the visible thing, then verify the checked flag.
+  function clickRadio(input) {
+    const targets = [];
+    if (input.id) {
+      const l = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+      if (l) targets.push(l);
+    }
+    const wrap = input.closest("label");
+    if (wrap && !targets.includes(wrap)) targets.push(wrap);
+    targets.push(input);
+    for (const t of targets) {
+      flash(visible(t) ? t : input.closest("fieldset") || t);
+      try { t.click(); } catch {}
+      if (input.checked) return true;
+    }
+    // Last resort: set the flag natively and announce it.
+    try {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked").set;
+      setter.call(input, true);
+      input.dispatchEvent(new Event("click", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch {}
+    return input.checked;
+  }
 
   function fillSelect(sel, rule, eeo) {
     const options = [...sel.options].map((o) => ({ label: o.textContent, value: o.value }));
@@ -191,24 +258,7 @@ const FillaFill = (() => {
     }
     if (!pick) return false;
     setNativeValue(sel, pick.value);
-    return true;
-  }
-
-  function fillRadioGroup(radios, rule, eeo) {
-    if (!rule.eeo) return false;
-    const answer = eeo?.[rule.eeo];
-    if (!answer) return false;
-    const syn = EEO_OPTION_SYNONYMS[rule.eeo]?.[answer] || [answer];
-    const labelled = radios.map((r) => ({ el: r, label: labelFor(r) }));
-    for (const w of syn) {
-      const hit = labelled.find((x) => x.label.includes(w));
-      if (hit) {
-        hit.el.click();
-        hit.el.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
-      }
-    }
-    return false;
+    return sel.value === pick.value;
   }
 
   function base64ToFile(b64, filename) {
@@ -218,12 +268,10 @@ const FillaFill = (() => {
     return new File([arr], filename, { type: "application/pdf" });
   }
 
-  function attachResume(input, pdfBase64, filename) {
-    const dt = new DataTransfer();
-    dt.items.add(base64ToFile(pdfBase64, filename));
-    input.files = dt.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+  function isCombobox(el) {
+    return el.getAttribute("role") === "combobox" ||
+           !!el.getAttribute("aria-autocomplete") ||
+           el.closest('[role="combobox"]') !== null;
   }
 
   // ---------- main entry ----------
@@ -231,35 +279,45 @@ const FillaFill = (() => {
   async function run({ fields, eeo, pdfBase64, pdfFilename, hints }) {
     const rules = buildRules(fields || {}, eeo || {});
     const filled = [];
+    const check = [];
     const skipped = [];
     const used = new Set();
-    const PACE = 350; // ms between fields, slow enough to follow along
+    const satisfied = new Set(); // eeo keys already handled on this page
+    const PACE = 350;
+
+    const report = (name, status) => {
+      ({ filled, check, skipped })[
+        status === "filled" ? "filled" : status === "check" ? "check" : "skipped"
+      ].push(name);
+      progress(name, status);
+    };
 
     const p = fields?.personal || {};
     const hintValues = {
-      first_name: p.first_name,
-      last_name: p.last_name,
-      full_name: p.full_name || [p.first_name, p.last_name].filter(Boolean).join(" "),
-      email: p.email,
-      phone: p.phone,
-      location: p.location,
-      linkedin: p.linkedin,
-      github: p.github,
-      website: p.website,
-      company: (fields?.work_experience || [])[0]?.company,
+      first_name: ["First name", p.first_name],
+      last_name: ["Last name", p.last_name],
+      full_name: ["Name", p.full_name || [p.first_name, p.last_name].filter(Boolean).join(" ")],
+      email: ["Email", p.email],
+      phone: ["Phone", p.phone],
+      location: ["Location", p.location],
+      linkedin: ["LinkedIn", p.linkedin],
+      github: ["GitHub", p.github],
+      website: ["Website", p.website],
+      company: ["Current company", (fields?.work_experience || [])[0]?.company],
     };
 
-    // 1. Adapter hints.
+    // 1. Adapter hints: exact selectors for known ATS fields.
     for (const [key, selectors] of Object.entries(hints || {})) {
       if (key === "resume") continue;
+      const [name, value] = hintValues[key] || [];
+      if (!value) continue;
       for (const sel of selectors) {
         const el = document.querySelector(sel);
-        if (el && visible(el) && hintValues[key]) {
+        if (el && visible(el)) {
           flash(el);
-          setNativeValue(el, hintValues[key]);
+          setNativeValue(el, value);
           used.add(el);
-          filled.push(key.replace(/_/g, " "));
-          progress(key.replace(/_/g, " "), "filled");
+          report(name, el.value ? "filled" : "check");
           await sleep(PACE);
           break;
         }
@@ -275,26 +333,27 @@ const FillaFill = (() => {
         if (el && !used.has(el)) {
           try {
             flash(el.closest("div") || el);
-            attachResume(el, pdfBase64, pdfFilename || "resume.pdf");
+            const dt = new DataTransfer();
+            dt.items.add(base64ToFile(pdfBase64, pdfFilename || "resume.pdf"));
+            el.files = dt.files;
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            el.dispatchEvent(new Event("input", { bubbles: true }));
             used.add(el);
-            filled.push("resume upload");
-            progress("resume upload", "filled");
+            report("Resume upload", el.files.length ? "filled" : "check");
             attached = true;
             await sleep(PACE);
-          } catch (e) {
-            skipped.push("resume upload");
-            progress("resume upload", "skipped");
+          } catch {
+            report("Resume upload", "skipped");
           }
           break;
         }
       }
-      if (!attached && !skipped.includes("resume upload")) {
-        skipped.push("resume upload (no file box on this page)");
-        progress("resume upload", "skipped");
+      if (!attached && !skipped.includes("Resume upload")) {
+        report("Resume upload", "skipped");
       }
     }
 
-    // 3. Generic pass over remaining controls.
+    // 3. Generic pass over text inputs, textareas, selects.
     const controls = [
       ...document.querySelectorAll(
         'input:not([type=file]):not([type=hidden]):not([type=submit]):not([type=checkbox]):not([type=radio]), textarea, select'
@@ -302,70 +361,123 @@ const FillaFill = (() => {
     ].filter((el) => visible(el) && !used.has(el));
 
     for (const el of controls) {
-      const rawLabel = labelFor(el);
-      const label = cleanLabel(rawLabel);
-      if (!rawLabel) continue;
-      const rule = rules.find((r) => r.re.test(rawLabel));
+      const mt = matchText(el);
+      if (!mt) continue;
+      const rule = rules.find((r) => r.re.test(mt));
+      const name = rule ? (rule.name || EEO_NAMES[rule.eeo]) : prettyName(el, rule);
       if (!rule) {
-        if ((el.required || rawLabel.includes("required")) && label) {
-          skipped.push(label.slice(0, 60));
-          progress(label.slice(0, 60), "skipped");
+        if (el.required || mt.includes("required")) {
+          const pn = prettyName(el, null);
+          if (pn !== "Field") report(pn, "skipped");
         }
         continue;
       }
-      let ok = false;
+      let status = null;
       if (el instanceof HTMLSelectElement) {
-        ok = fillSelect(el, rule, eeo);
+        flash(el);
+        status = fillSelect(el, rule, eeo) ? "filled" : null;
       } else if (rule.value) {
         if (!el.value) {
           flash(el);
           setNativeValue(el, rule.value);
-          ok = true;
+          // A combobox accepted the text but may still need a pick from its
+          // dropdown, which only a human can confirm.
+          status = isCombobox(el) ? "check" : (el.value ? "filled" : null);
         }
       } else if (rule.eeo && eeo?.[rule.eeo]) {
         const map = { yes: "Yes", no: "No", decline: "Decline to self-identify" };
         flash(el);
         setNativeValue(el, map[eeo[rule.eeo]] || eeo[rule.eeo]);
-        ok = true;
+        status = el.value ? "filled" : null;
       }
-      const shown = label || "field";
-      if (ok) {
+      if (status) {
         used.add(el);
-        filled.push(shown.slice(0, 50));
-        progress(shown.slice(0, 50), "filled");
+        if (rule.eeo) satisfied.add(rule.eeo);
+        report(name, status);
         await sleep(PACE);
-      } else if (label) {
-        skipped.push(shown.slice(0, 60));
-        progress(shown.slice(0, 60), "skipped");
+      } else if (rule.eeo && !eeo?.[rule.eeo]) {
+        report(name, "skipped");
       }
     }
 
-    // 4. Radio groups (EEO questions frequently render as radios).
-    const radios = [...document.querySelectorAll('input[type="radio"]')].filter(visible);
+    // 4. Radio groups. No visibility filter: real inputs are usually hidden
+    //    behind styled labels.
+    const radios = [...document.querySelectorAll('input[type="radio"]')];
     const groups = {};
     radios.forEach((r) => {
       const key = r.name || r.closest("fieldset,div")?.textContent?.slice(0, 60) || "x";
       (groups[key] ||= []).push(r);
     });
-    for (const [key, group] of Object.entries(groups)) {
-      const groupLabel = norm(
-        group[0].closest("fieldset")?.querySelector("legend")?.textContent ||
-          group[0].name || key
+    for (const group of Object.values(groups)) {
+      const g0 = group[0];
+      const rg = g0.closest('[role="radiogroup"],fieldset');
+      const groupText = norm(
+        rg?.querySelector("legend")?.textContent ||
+        rg?.getAttribute("aria-label") ||
+        g0.name || ""
       );
-      const rule = rules.find((r) => r.eeo && r.re.test(groupLabel));
-      if (rule) {
-        flash(group[0].closest("fieldset") || group[0]);
-        if (fillRadioGroup(group, rule, eeo)) {
-          const shown = cleanLabel(groupLabel) || "choice";
-          filled.push(shown.slice(0, 50));
-          progress(shown.slice(0, 50), "filled");
-          await sleep(PACE);
+      const rule = rules.find((r) => r.eeo && r.re.test(groupText));
+      if (!rule || satisfied.has(rule.eeo)) continue;
+      const name = EEO_NAMES[rule.eeo];
+      const answer = eeo?.[rule.eeo];
+      if (!answer) { report(name, "skipped"); continue; }
+      const syn = EEO_OPTION_SYNONYMS[rule.eeo]?.[answer] || [answer];
+      const labelled = group.map((r) => ({ el: r, label: matchText(r) }));
+      let hit = null;
+      for (const w of syn) {
+        hit = labelled.find((x) => x.label.includes(w));
+        if (hit) break;
+      }
+      if (!hit) { report(name, "skipped"); continue; }
+      const ok = clickRadio(hit.el);
+      satisfied.add(rule.eeo);
+      report(name, ok ? "filled" : "check");
+      await sleep(PACE);
+    }
+
+    // 5. Yes/No button toggles (segmented controls that are neither radios
+    //    nor selects, common on Ashby for work authorization).
+    for (const key of ["work_authorized", "requires_sponsorship"]) {
+      if (satisfied.has(key)) continue;
+      const answer = eeo?.[key];
+      if (!answer) continue;
+      const rule = rules.find((r) => r.eeo === key);
+      const name = EEO_NAMES[key];
+      const questions = [...document.querySelectorAll("label,legend,p,span,strong,b,h3,h4,div")]
+        .filter((n) => n.childElementCount <= 2 &&
+                       n.textContent.trim().length < 240 &&
+                       rule.re.test(norm(n.textContent)));
+      let done = false;
+      for (const q of questions) {
+        let scope = q;
+        for (let up = 0; up < 4 && scope && !done; up++) {
+          const btns = [...scope.querySelectorAll('button,[role="radio"],[role="button"],[role="option"]')]
+            .filter((b) => /^(yes|no)$/i.test(b.textContent.trim()) && visible(b));
+          const hit = btns.find((b) => b.textContent.trim().toLowerCase() === answer);
+          if (hit) {
+            flash(hit);
+            hit.click();
+            const verified =
+              hit.getAttribute("aria-checked") === "true" ||
+              hit.getAttribute("aria-pressed") === "true" ||
+              /select|active|checked/i.test(hit.className);
+            satisfied.add(key);
+            report(name, verified ? "filled" : "check");
+            await sleep(PACE);
+            done = true;
+          }
+          scope = scope.parentElement;
         }
+        if (done) break;
       }
     }
 
     progress("", "done");
-    return { filled: [...new Set(filled)], skipped: [...new Set(skipped)] };
+    return {
+      filled: [...new Set(filled)],
+      check: [...new Set(check)],
+      skipped: [...new Set(skipped)].filter((s) => !filled.includes(s) && !check.includes(s)),
+    };
   }
 
   return { run };
