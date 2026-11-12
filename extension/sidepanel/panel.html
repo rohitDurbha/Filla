@@ -78,10 +78,18 @@
     <!-- Final PDF approval -->
     <section id="view-pdf" class="view hidden">
       <h2>Final resume</h2>
-      <iframe id="pdf-frame" title="Resume PDF"></iframe>
-      <div class="btnrow">
+      <div id="pdf-pages" class="pdf-pages"></div>
+      <div id="tex-editor" class="hidden">
+        <textarea id="tex-area" spellcheck="false" aria-label="LaTeX source"></textarea>
+        <div class="btnrow">
+          <button id="tex-cancel" class="ghost">Cancel</button>
+          <button id="tex-recompile" class="primary">Recompile</button>
+        </div>
+      </div>
+      <div class="btnrow" id="pdf-actions">
         <button id="pdf-back" class="ghost">Edit fields</button>
-        <button id="pdf-approve" class="primary">Approve and continue</button>
+        <button id="edit-tex" class="ghost">Edit LaTeX</button>
+        <button id="pdf-approve" class="primary">Approve and download</button>
       </div>
     </section>
 

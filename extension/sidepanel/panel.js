@@ -329,14 +329,69 @@ $("review-approve").addEventListener("click", async () => {
       state.dirty = false;
     } catch (e) { show("review"); return fail(e); }
   }
-  $("pdf-frame").src = `${SERVER}/pdf/${state.appId}#toolbar=0&t=${Date.now()}`;
-  $("pdf-approve").textContent = state.source === "pdf"
-    ? "Approve and continue"
-    : "Approve, download, continue";
-  show("pdf");
+  enterPdfView();
 });
 
 // ---------- pdf approval ----------
+
+async function loadPreview() {
+  const box = $("pdf-pages");
+  box.innerHTML = '<div class="loading">Rendering preview…</div>';
+  try {
+    const meta = await api(`/preview/${state.appId}`);
+    box.innerHTML = "";
+    for (let i = 0; i < meta.pages; i++) {
+      const img = document.createElement("img");
+      img.src = `${SERVER}/preview/${state.appId}/${i}?t=${Date.now()}`;
+      img.alt = `Resume page ${i + 1}`;
+      box.appendChild(img);
+    }
+  } catch (e) {
+    box.innerHTML = "";
+    fail(e);
+  }
+}
+
+function enterPdfView() {
+  $("pdf-approve").textContent = state.source === "pdf"
+    ? "Approve and continue"
+    : "Approve and download";
+  $("edit-tex").classList.toggle("hidden", state.source === "pdf");
+  closeTexEditor();
+  loadPreview();
+  show("pdf");
+}
+
+function closeTexEditor() {
+  $("tex-editor").classList.add("hidden");
+  $("pdf-pages").classList.remove("hidden");
+  $("pdf-actions").classList.remove("hidden");
+}
+
+$("edit-tex").addEventListener("click", async () => {
+  try {
+    const { tex } = await api(`/tex/${state.appId}`);
+    $("tex-area").value = tex;
+    $("pdf-pages").classList.add("hidden");
+    $("pdf-actions").classList.add("hidden");
+    $("tex-editor").classList.remove("hidden");
+  } catch (e) { fail(e); }
+});
+
+$("tex-cancel").addEventListener("click", closeTexEditor);
+
+$("tex-recompile").addEventListener("click", async () => {
+  const btn = $("tex-recompile");
+  btn.disabled = true;
+  btn.textContent = "Compiling…";
+  try {
+    await api("/retex", { app_id: state.appId, tex: $("tex-area").value });
+    closeTexEditor();
+    loadPreview();
+  } catch (e) { fail(e); }
+  btn.disabled = false;
+  btn.textContent = "Recompile";
+});
 
 $("pdf-back").addEventListener("click", () => { renderEditor(state.fields); show("review"); });
 

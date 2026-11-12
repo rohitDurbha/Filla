@@ -74,11 +74,40 @@ class StatusRequest(BaseModel):
     status: str
 
 
+class RetexRequest(BaseModel):
+    app_id: str
+    tex: str
+
+
 def _run_dir(app_id: str) -> Path:
     d = RUNS / app_id
     if not d.exists():
         raise HTTPException(404, "Unknown app_id")
     return d
+
+
+def _clear_previews(d: Path) -> None:
+    for p in d.glob("page_*.png"):
+        p.unlink()
+
+
+def _render_previews(d: Path) -> int:
+    """Render the PDF to page PNGs (Chrome's PDF plugin refuses to run
+    inside an extension side panel, so the panel shows images instead)."""
+    import pypdfium2 as pdfium
+
+    existing = sorted(d.glob("page_*.png"))
+    pdf_path = d / "resume.pdf"
+    if existing and existing[0].stat().st_mtime > pdf_path.stat().st_mtime:
+        return len(existing)
+    _clear_previews(d)
+    doc = pdfium.PdfDocument(pdf_path)
+    try:
+        for i, page in enumerate(doc):
+            page.render(scale=2.0).to_pil().save(d / f"page_{i}.png")
+        return len(doc)
+    finally:
+        doc.close()
 
 
 def _compile(app_id: str, tex: str, fields: dict, notes: str,
@@ -90,6 +119,7 @@ def _compile(app_id: str, tex: str, fields: dict, notes: str,
     (d / "fields.json").write_text(json.dumps(fields, indent=2))
     try:
         latex.compile_tex(tex_path, d)
+        _clear_previews(d)
     except latex.LatexError as e:
         # One automatic repair round: hand the error back to Claude, which
         # fixes most escaping and brace mistakes, then compile once more.
@@ -201,6 +231,47 @@ def save_fields(app_id: str, fields: dict):
     d = _run_dir(app_id)
     (d / "fields.json").write_text(json.dumps(fields, indent=2))
     return {"ok": True}
+
+
+@app.get("/tex/{app_id}")
+def get_tex(app_id: str):
+    d = _run_dir(app_id)
+    tex_path = d / "resume.tex"
+    if not tex_path.exists():
+        raise HTTPException(404, "This run has no LaTeX source (own-PDF path).")
+    return {"tex": tex_path.read_text()}
+
+
+@app.post("/retex")
+def retex(req: RetexRequest):
+    """Direct LaTeX edit from the panel. Compiled as-is, no Claude repair,
+    so the user sees the real compiler error for their own edit."""
+    d = _run_dir(req.app_id)
+    tex_path = d / "resume.tex"
+    tex_path.write_text(req.tex)
+    try:
+        latex.compile_tex(tex_path, d)
+        _clear_previews(d)
+    except latex.LatexError as e:
+        raise HTTPException(502, str(e))
+    return {"ok": True, "pdf_url": f"/pdf/{req.app_id}"}
+
+
+@app.get("/preview/{app_id}")
+def preview_meta(app_id: str):
+    d = _run_dir(app_id)
+    if not (d / "resume.pdf").exists():
+        raise HTTPException(404, "PDF not built yet")
+    return {"pages": _render_previews(d)}
+
+
+@app.get("/preview/{app_id}/{page}")
+def preview_page(app_id: str, page: int):
+    d = _run_dir(app_id)
+    png = d / f"page_{page}.png"
+    if not png.exists():
+        raise HTTPException(404, "No such page")
+    return FileResponse(png, media_type="image/png")
 
 
 @app.get("/pdf/{app_id}")
