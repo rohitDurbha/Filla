@@ -27,8 +27,21 @@
         "https://jobs.smartrecruiters.com/*",
         "https://careers.smartrecruiters.com/*"
       ],
-      "js": ["content/adapters.js", "content/autofill.js", "content/detector.js"],
+      "js": ["content/adapters.js", "content/autofill.js", "content/detector.js", "content/overlay.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["sidepanel/*"],
+      "matches": [
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://jobs.ashbyhq.com/*",
+        "https://jobs.smartrecruiters.com/*",
+        "https://careers.smartrecruiters.com/*"
+      ]
     }
   ]
 }
