@@ -198,6 +198,14 @@ function enterReview(out) {
   $("review-note").textContent = state.source === "pdf"
     ? "Extracted from your PDF without any AI. Fix anything it missed, then continue."
     : "Everything below comes from the tailored resume. Edits are written back into the LaTeX before the final PDF.";
+  const notes = $("claude-notes");
+  if (state.source === "claude" && out.notes) {
+    notes.innerHTML = "<b>What Claude changed</b>\n";
+    notes.appendChild(document.createTextNode(out.notes));
+    notes.classList.remove("hidden");
+  } else {
+    notes.classList.add("hidden");
+  }
   renderEditor(out.fields);
   show("review");
 }

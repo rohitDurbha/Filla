@@ -36,6 +36,15 @@ tracks:
 # Your written rules for how Claude may tailor a resume.
 rules_file: resumes/rules.md
 
+# Public GitHub projects are fetched, cached, and handed to Claude so it can
+# pick the best-suited projects per job, as your rules describe. Only public
+# repositories are visible this way.
+github:
+  username: rohitDurbha
+  include_readmes: true
+  max_repos: 20
+  cache_hours: 24
+
 # Name used for the downloaded PDF. Recruiters see this filename.
 pdf_filename: Rohit_Durbha_Resume.pdf
 

@@ -26,6 +26,7 @@ from pydantic import BaseModel
 import claude_client
 import db as dbmod
 import extract
+import github
 import latex
 
 ROOT = Path(__file__).resolve().parent.parent   # repo root
@@ -95,7 +96,8 @@ def _compile(app_id: str, tex: str, fields: dict, notes: str,
         if allow_repair:
             try:
                 fixed = claude_client.repair(
-                    FIX_PROMPT.format(error=str(e)[:4000], resume_tex=tex), CFG
+                    FIX_PROMPT.format(error=str(e)[:4000], resume_tex=tex), CFG,
+                    log_dir=d,
                 )
                 return _compile(app_id, fixed, fields,
                                 notes + " Auto-repaired a LaTeX error.",
@@ -132,18 +134,22 @@ def tailor(req: TailorRequest):
 
     prompt = TAILOR_PROMPT.format(
         rules=rules,
+        github_projects=github.inventory(CFG, SERVER / "github_cache.json"),
         resume_tex=resume_path.read_text(),
         job_title=req.job.title or "(not captured)",
         job_company=req.job.company or "(not captured)",
         job_description=req.job.description[:20000],
     )
 
+    app_id = uuid.uuid4().hex[:12]
+    run_dir = RUNS / app_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     try:
-        result = claude_client.tailor(prompt, CFG)
+        result = claude_client.tailor(prompt, CFG, log_dir=run_dir)
     except claude_client.ClaudeError as e:
         raise HTTPException(502, str(e))
 
-    app_id = uuid.uuid4().hex[:12]
     out = _compile(app_id, result["tex"], result["fields"], result["notes"])
     dbmod.log_application(DB_PATH, app_id, req.job.model_dump(), req.track,
                           RUNS / app_id / "resume.pdf")
@@ -158,7 +164,7 @@ def revise(req: ReviseRequest):
         fields_json=json.dumps(req.fields, indent=2),
     )
     try:
-        result = claude_client.revise(prompt, CFG)
+        result = claude_client.revise(prompt, CFG, log_dir=d)
     except claude_client.ClaudeError as e:
         raise HTTPException(502, str(e))
     return _compile(req.app_id, result["tex"], result["fields"], result["notes"])

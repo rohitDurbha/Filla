@@ -3,6 +3,7 @@ server/resumes/*.tex
 server/resumes/rules.md
 server/runs/
 server/filla.db
+server/github_cache.json
 
 __pycache__/
 *.pyc

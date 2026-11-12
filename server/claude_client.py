@@ -26,9 +26,16 @@ class ClaudeError(RuntimeError):
     pass
 
 
-def run_claude(prompt: str, cfg: dict) -> str:
-    """Run claude -p with the prompt on stdin and return the text result."""
+def run_claude(prompt: str, cfg: dict, log: tuple | None = None) -> str:
+    """Run claude -p with the prompt on stdin and return the text result.
+
+    log, when given, is (directory, name): the exact prompt and raw answer
+    are written there so a run can be audited afterwards.
+    """
     ccfg = cfg["claude"]
+    if log:
+        log_dir, name = log
+        (log_dir / f"{name}.prompt.txt").write_text(prompt)
     cmd = [
         ccfg.get("command", "claude"),
         "-p",
@@ -60,10 +67,14 @@ def run_claude(prompt: str, cfg: dict) -> str:
     except json.JSONDecodeError:
         raise ClaudeError(f"Unexpected output from claude -p: {proc.stdout[:500]}")
 
-    if envelope.get("is_error"):
-        raise ClaudeError(f"Claude returned an error: {envelope.get('result', '')[:2000]}")
+    result = envelope.get("result", "")
+    if log:
+        (log_dir / f"{name}.response.txt").write_text(result)
 
-    return envelope.get("result", "")
+    if envelope.get("is_error"):
+        raise ClaudeError(f"Claude returned an error: {result[:2000]}")
+
+    return result
 
 
 def parse_delimited(text: str) -> dict:
@@ -110,13 +121,13 @@ def parse_tex_only(text: str) -> str:
     return m.group(1).strip()
 
 
-def tailor(prompt: str, cfg: dict) -> dict:
-    return parse_delimited(run_claude(prompt, cfg))
+def tailor(prompt: str, cfg: dict, log_dir=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "tailor") if log_dir else None))
 
 
-def revise(prompt: str, cfg: dict) -> dict:
-    return parse_delimited(run_claude(prompt, cfg))
+def revise(prompt: str, cfg: dict, log_dir=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "revise") if log_dir else None))
 
 
-def repair(prompt: str, cfg: dict) -> str:
-    return parse_tex_only(run_claude(prompt, cfg))
+def repair(prompt: str, cfg: dict, log_dir=None) -> str:
+    return parse_tex_only(run_claude(prompt, cfg, (log_dir, "repair") if log_dir else None))
