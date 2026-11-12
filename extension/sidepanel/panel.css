@@ -19,11 +19,24 @@
   --shadow: 0 1px 2px rgba(23, 24, 29, 0.05), 0 8px 24px rgba(23, 24, 29, 0.06);
 }
 
+@font-face {
+  font-family: "Geist Serif";
+  src: url("../fonts/GeistSerifVF.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 * { box-sizing: border-box; }
 
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 13.5px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.55 "Geist Serif", Georgia, serif;
   display: flex; flex-direction: column; min-height: 100vh;
   overflow-x: hidden;
 }
@@ -232,7 +245,7 @@ details.sec .body { padding: 0 13px 13px; }
 
 #tex-area {
   width: 100%; height: 46vh; margin-top: 10px; resize: vertical;
-  font: 11px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+  font: 11px/1.5 "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   background: var(--card); color: var(--text);
   border: 1px solid var(--line); border-radius: var(--r); padding: 10px;
   white-space: pre; overflow-x: auto;
@@ -260,7 +273,7 @@ details.sec .body { padding: 0 13px 13px; }
 }
 #error-text {
   margin: 6px 0 0; padding: 0 12px 10px; max-height: 150px; overflow: auto;
-  font: 11px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+  font: 11px/1.5 "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
   color: #934554; white-space: pre-wrap; word-break: break-word;
 }
 

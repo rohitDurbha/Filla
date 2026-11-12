@@ -33,7 +33,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["sidepanel/*"],
+      "resources": ["sidepanel/*", "fonts/*"],
       "matches": [
         "https://boards.greenhouse.io/*",
         "https://job-boards.greenhouse.io/*",

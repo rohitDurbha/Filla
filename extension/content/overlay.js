@@ -15,6 +15,18 @@
   const host = document.createElement("filla-root");
   const shadow = host.attachShadow({ mode: "closed" });
 
+  // @font-face does not take effect inside a shadow root, so the face is
+  // declared at document level and only the family is used in the shadow.
+  const fontFace = document.createElement("style");
+  fontFace.textContent = `
+    @font-face {
+      font-family: "Filla Geist Serif";
+      src: url("${chrome.runtime.getURL("fonts/GeistSerifVF.woff2")}") format("woff2");
+      font-weight: 400;
+      font-display: swap;
+    }`;
+  document.documentElement.appendChild(fontFace);
+
   const style = document.createElement("style");
   style.textContent = `
     :host { all: initial; }
@@ -24,7 +36,8 @@
       position: fixed; right: 18px; z-index: 2147483000;
       width: 46px; height: 46px; border-radius: 50%;
       border: 1px solid #E8E9F0;
-      cursor: grab; color: #17181D; font: 800 19px/1 system-ui, sans-serif;
+      cursor: grab; color: #17181D;
+      font: 700 19px/1 "Filla Geist Serif", Georgia, serif;
       background: #FFFFFF;
       box-shadow: 0 2px 6px rgba(23, 24, 29, 0.08), 0 10px 28px rgba(23, 24, 29, 0.14);
       display: flex; align-items: center; justify-content: center;
