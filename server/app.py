@@ -62,11 +62,17 @@ class Job(BaseModel):
 class TailorRequest(BaseModel):
     job: Job
     track: str
+    cancel_id: str = ""
 
 
 class ReviseRequest(BaseModel):
     app_id: str
     fields: dict
+    cancel_id: str = ""
+
+
+class CancelRequest(BaseModel):
+    cancel_id: str
 
 
 class StatusRequest(BaseModel):
@@ -176,7 +182,10 @@ def tailor(req: TailorRequest):
     run_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        result = claude_client.tailor(prompt, CFG, log_dir=run_dir)
+        result = claude_client.tailor(prompt, CFG, log_dir=run_dir,
+                                      cancel_id=req.cancel_id or None)
+    except claude_client.ClaudeCancelled:
+        raise HTTPException(409, "Cancelled.")
     except claude_client.ClaudeError as e:
         raise HTTPException(502, str(e))
 
@@ -194,7 +203,10 @@ def revise(req: ReviseRequest):
         fields_json=json.dumps(req.fields, indent=2),
     )
     try:
-        result = claude_client.revise(prompt, CFG, log_dir=d)
+        result = claude_client.revise(prompt, CFG, log_dir=d,
+                                      cancel_id=req.cancel_id or None)
+    except claude_client.ClaudeCancelled:
+        raise HTTPException(409, "Cancelled.")
     except claude_client.ClaudeError as e:
         raise HTTPException(502, str(e))
     return _compile(req.app_id, result["tex"], result["fields"], result["notes"])
@@ -288,6 +300,12 @@ def pdf(app_id: str):
 def fields(app_id: str):
     d = _run_dir(app_id)
     return json.loads((d / "fields.json").read_text())
+
+
+@app.post("/cancel")
+def cancel(req: CancelRequest):
+    """Kill a running Claude call so an accidental click costs nothing more."""
+    return {"ok": claude_client.cancel(req.cancel_id)}
 
 
 @app.post("/status")

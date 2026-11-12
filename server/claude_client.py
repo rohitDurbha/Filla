@@ -26,11 +26,35 @@ class ClaudeError(RuntimeError):
     pass
 
 
-def run_claude(prompt: str, cfg: dict, log: tuple | None = None) -> str:
+class ClaudeCancelled(ClaudeError):
+    pass
+
+
+# Running claude -p subprocesses by cancel id, so a user-side cancel can
+# actually kill the process instead of letting it finish and spend usage.
+_running: dict[str, subprocess.Popen] = {}
+_cancelled: set[str] = set()
+
+
+def cancel(cancel_id: str) -> bool:
+    proc = _running.get(cancel_id)
+    if proc is None:
+        return False
+    _cancelled.add(cancel_id)
+    try:
+        proc.kill()
+    except Exception:
+        pass
+    return True
+
+
+def run_claude(prompt: str, cfg: dict, log: tuple | None = None,
+               cancel_id: str | None = None) -> str:
     """Run claude -p with the prompt on stdin and return the text result.
 
     log, when given, is (directory, name): the exact prompt and raw answer
-    are written there so a run can be audited afterwards.
+    are written there so a run can be audited afterwards. cancel_id, when
+    given, registers the subprocess so cancel() can kill it mid-flight.
     """
     ccfg = cfg["claude"]
     if log:
@@ -44,28 +68,43 @@ def run_claude(prompt: str, cfg: dict, log: tuple | None = None) -> str:
     ] + list(ccfg.get("extra_args") or [])
 
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            input=prompt,
-            capture_output=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=int(ccfg.get("timeout_seconds", 420)),
         )
     except FileNotFoundError:
         raise ClaudeError(
             "The 'claude' command was not found. Install Claude Code and log in "
             "with your Claude account, then restart the server."
         )
+
+    if cancel_id:
+        _running[cancel_id] = proc
+    try:
+        stdout, stderr = proc.communicate(
+            prompt, timeout=int(ccfg.get("timeout_seconds", 420))
+        )
     except subprocess.TimeoutExpired:
+        proc.kill()
         raise ClaudeError("Claude timed out. Try again, or raise claude.timeout_seconds in config.yaml.")
+    finally:
+        if cancel_id:
+            _running.pop(cancel_id, None)
+
+    if cancel_id and cancel_id in _cancelled:
+        _cancelled.discard(cancel_id)
+        raise ClaudeCancelled("Cancelled by user.")
 
     if proc.returncode != 0:
-        raise ClaudeError(f"claude -p failed (exit {proc.returncode}): {proc.stderr.strip()[:2000]}")
+        raise ClaudeError(f"claude -p failed (exit {proc.returncode}): {(stderr or '').strip()[:2000]}")
 
     try:
-        envelope = json.loads(proc.stdout)
+        envelope = json.loads(stdout)
     except json.JSONDecodeError:
-        raise ClaudeError(f"Unexpected output from claude -p: {proc.stdout[:500]}")
+        raise ClaudeError(f"Unexpected output from claude -p: {stdout[:500]}")
 
     result = envelope.get("result", "")
     if log:
@@ -121,13 +160,13 @@ def parse_tex_only(text: str) -> str:
     return m.group(1).strip()
 
 
-def tailor(prompt: str, cfg: dict, log_dir=None) -> dict:
-    return parse_delimited(run_claude(prompt, cfg, (log_dir, "tailor") if log_dir else None))
+def tailor(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "tailor") if log_dir else None, cancel_id))
 
 
-def revise(prompt: str, cfg: dict, log_dir=None) -> dict:
-    return parse_delimited(run_claude(prompt, cfg, (log_dir, "revise") if log_dir else None))
+def revise(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "revise") if log_dir else None, cancel_id))
 
 
-def repair(prompt: str, cfg: dict, log_dir=None) -> str:
-    return parse_tex_only(run_claude(prompt, cfg, (log_dir, "repair") if log_dir else None))
+def repair(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> str:
+    return parse_tex_only(run_claude(prompt, cfg, (log_dir, "repair") if log_dir else None, cancel_id))

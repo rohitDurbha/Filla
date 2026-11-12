@@ -41,12 +41,13 @@ function fail(msg) {
 function hideError() { $("error-box").classList.add("hidden"); }
 $("error-close").addEventListener("click", hideError);
 
-async function api(path, body) {
+async function api(path, body, signal) {
   const resp = await fetch(SERVER + path, body ? {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  } : undefined);
+    signal,
+  } : { signal });
   if (!resp.ok) {
     let detail = resp.statusText;
     try { detail = (await resp.json()).detail || detail; } catch {}
@@ -54,6 +55,31 @@ async function api(path, body) {
   }
   return resp.json();
 }
+
+// ---------- cancellable busy state ----------
+
+let busyCtl = null;
+
+function startBusy(returnView, text) {
+  state.cancelId = crypto.randomUUID();
+  state.busyReturn = returnView;
+  busyCtl = new AbortController();
+  $("busy-text").textContent = text;
+  show("busy");
+  return busyCtl.signal;
+}
+
+$("busy-cancel").addEventListener("click", () => {
+  busyCtl?.abort();
+  const id = state.cancelId;
+  if (id) fetch(SERVER + "/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cancel_id: id }),
+  }).catch(() => {});
+  if (state.busyReturn === "review") renderEditor(state.fields);
+  show(state.busyReturn || "job");
+});
 
 // ---------- startup ----------
 
@@ -126,9 +152,8 @@ async function detectJob() {
 $("apply").addEventListener("click", async () => {
   state.source = "claude";
   $("stage-resume-label").textContent = "Resume";
-  show("busy");
-  $("busy-text").textContent =
-    "Claude is reading the posting and tailoring your resume. This usually takes a minute.";
+  const signal = startBusy("job",
+    "Claude is reading the posting and tailoring your resume. This usually takes a minute.");
   try {
     const out = await api("/tailor", {
       job: {
@@ -137,9 +162,13 @@ $("apply").addEventListener("click", async () => {
         description: state.job.description,
       },
       track: $("track").value,
-    });
+      cancel_id: state.cancelId,
+    }, signal);
     enterReview(out);
-  } catch (e) { show("job"); fail(e); }
+  } catch (e) {
+    if (e.name === "AbortError") return; // user cancelled, already navigated
+    show("job"); fail(e);
+  }
 });
 
 // ---------- path two: use an existing PDF ----------
@@ -170,8 +199,7 @@ document.addEventListener("drop", (e) => {
 async function handlePdf(file) {
   state.source = "pdf";
   $("stage-resume-label").textContent = "PDF";
-  show("busy");
-  $("busy-text").textContent = "Reading your PDF…";
+  const signal = startBusy("job", "Reading your PDF…");
   try {
     const form = new FormData();
     form.append("resume", file, file.name);
@@ -179,14 +207,17 @@ async function handlePdf(file) {
     form.append("company", state.job?.company || "");
     form.append("url", state.job?.url || "");
     form.append("ats", state.job?.ats || "");
-    const resp = await fetch(SERVER + "/upload", { method: "POST", body: form });
+    const resp = await fetch(SERVER + "/upload", { method: "POST", body: form, signal });
     if (!resp.ok) {
       let detail = resp.statusText;
       try { detail = (await resp.json()).detail || detail; } catch {}
       throw new Error(detail);
     }
     enterReview(await resp.json());
-  } catch (e) { show("job"); fail(e); }
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    show("job"); fail(e);
+  }
 }
 
 // ---------- review ----------
@@ -321,13 +352,17 @@ $("review-approve").addEventListener("click", async () => {
     // No LaTeX to rebuild; just persist the edits for the autofill step.
     try { await api(`/fields/${state.appId}`, state.fields); } catch (e) { return fail(e); }
   } else if (state.dirty) {
-    show("busy");
-    $("busy-text").textContent = "Applying your edits to the resume…";
+    const signal = startBusy("review", "Applying your edits to the resume…");
     try {
-      const out = await api("/revise", { app_id: state.appId, fields: state.fields });
+      const out = await api("/revise", {
+        app_id: state.appId, fields: state.fields, cancel_id: state.cancelId,
+      }, signal);
       state.fields = out.fields;
       state.dirty = false;
-    } catch (e) { show("review"); return fail(e); }
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      renderEditor(state.fields); show("review"); return fail(e);
+    }
   }
   enterPdfView();
 });
