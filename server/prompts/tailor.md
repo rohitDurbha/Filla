@@ -58,8 +58,9 @@ Answer with ONLY the following sections, nothing before or after:
 ===FIELDS===
 (a single JSON object, schema below, no markdown fences)
 ===NOTES===
-(5 short lines maximum: base score to final score, which projects you chose,
-and the 2 or 3 biggest changes. No step-by-step narration.)
+(First line, exactly this shape: Score: <base> -> <final>
+Then at most 4 short lines: which projects you chose and the 2 or 3
+biggest changes. No step-by-step narration.)
 ===END===
 
 FIELDS JSON schema. Omit a key only if the resume truly has no such section.

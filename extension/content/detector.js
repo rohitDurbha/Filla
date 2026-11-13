@@ -3,7 +3,7 @@
 // a page reload: stale copies go silent instead of answering first.
 
 (() => {
-  const FILLA_CONTENT_VERSION = 3;
+  const FILLA_CONTENT_VERSION = 4;
   window.__fillaGen = (window.__fillaGen || 0) + 1;
   const MY_GEN = window.__fillaGen;
 

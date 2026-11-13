@@ -477,19 +477,23 @@ def tracker():
     import html as h
 
     rows = dbmod.list_applications(DB_PATH, limit=1000)
-    applied = sum(1 for r in rows if r["status"] == "applied")
-    body = "".join(
-        f"""<tr>
-          <td class="dt">{h.escape((r['created_at'] or '')[:16])}</td>
-          <td class="co">{h.escape(r['company'] or '(unknown)')}</td>
-          <td>{h.escape(r['title'] or '')}</td>
-          <td><span class="pill">{h.escape(r['ats'] or '')}</span></td>
-          <td>{h.escape(r['track'] or '')}</td>
-          <td><span class="st st-{h.escape(r['status'] or 'tailored')}">{h.escape(r['status'] or 'tailored')}</span></td>
-          <td>{f'<a href="{h.escape(r["url"])}" target="_blank">open</a>' if r['url'] else ''}</td>
-        </tr>"""
-        for r in rows
-    )
+    submitted = [r for r in rows if r["status"] == "applied"]
+    seen = [r for r in rows if r["status"] != "applied"]
+
+    def table(items):
+        body = "".join(
+            f"""<tr>
+              <td class="dt">{h.escape((r['created_at'] or '')[:16])}</td>
+              <td class="co">{h.escape(r['company'] or '(unknown)')}</td>
+              <td>{h.escape(r['title'] or '')}</td>
+              <td><span class="pill">{h.escape(r['ats'] or '')}</span></td>
+              <td>{h.escape(r['track'] or '')}</td>
+              <td>{f'<a href="{h.escape(r["url"])}" target="_blank">open</a>' if r['url'] else ''}</td>
+            </tr>"""
+            for r in items
+        )
+        return ("<table><tr><th>When</th><th>Company</th><th>Role</th>"
+                "<th>ATS</th><th>Track</th><th></th></tr>" + body + "</table>")
     page = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Filla applications</title>
 <style>
@@ -516,16 +520,20 @@ def tracker():
   .co {{ font-weight:700; }}
   .pill {{ background:var(--soft); color:var(--ink); border-radius:99px;
           padding:1px 9px; font-size:11.5px; text-transform:capitalize; }}
-  .st {{ border-radius:99px; padding:1px 9px; font-size:11.5px; }}
-  .st-applied {{ background:#E4F4EC; color:#2E7D5B; }}
-  .st-tailored {{ background:#FBF3E4; color:#8A6A2B; }}
   a {{ color:var(--ink); }}
-  .empty {{ padding:48px; text-align:center; color:var(--muted); }}
+  .empty {{ padding:36px; text-align:center; color:var(--muted);
+            background:var(--card); border:1px solid var(--line); border-radius:14px; }}
+  h2 {{ font-size:15px; margin:34px 0 10px; }}
+  h2 .n {{ color:var(--ink); }}
 </style></head><body><div class="wrap">
 <div class="logo">Filla<i></i></div>
 <h1>Applications</h1>
-<p class="sub"><b>{applied}</b> applied of <b>{len(rows)}</b> tailored</p>
-{'<table><tr><th>When</th><th>Company</th><th>Role</th><th>ATS</th><th>Track</th><th>Status</th><th></th></tr>' + body + '</table>' if rows else '<div class="empty">Nothing yet. Tailor your first resume and it will show up here.</div>'}
+<p class="sub">One row per job. Re-tailoring a posting updates its row, and
+submitting it moves it up for good.</p>
+<h2>Submitted <span class="n">{len(submitted)}</span></h2>
+{table(submitted) if submitted else '<div class="empty">Nothing submitted yet. Mark an application as applied in the panel and it lands here.</div>'}
+<h2>Seen <span class="n">{len(seen)}</span></h2>
+{table(seen) if seen else '<div class="empty">No postings in progress.</div>'}
 </div></body></html>"""
     return HTMLResponse(page)
 

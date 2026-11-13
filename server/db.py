@@ -45,6 +45,14 @@ def init(db_path: Path) -> None:
 
 def log_application(db_path: Path, app_id, job, track, pdf_path):
     with _conn(db_path) as conn:
+        # One row per job: re-tailoring the same posting replaces the old
+        # seen row. Submitted applications are history and are never touched.
+        url = job.get("url")
+        if url:
+            conn.execute(
+                "DELETE FROM applications WHERE url = ? AND status != 'applied'",
+                (url,),
+            )
         conn.execute(
             """INSERT OR REPLACE INTO applications (id, company, title, url, ats, track, pdf_path)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",

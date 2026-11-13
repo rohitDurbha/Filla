@@ -418,6 +418,32 @@ const FillaFill = (() => {
 
     // 4. Radio groups. No visibility filter: real inputs are usually hidden
     //    behind styled labels.
+    const optionLabelOf = (r) => {
+      let t = "";
+      if (r.id) {
+        const l = document.querySelector(`label[for="${CSS.escape(r.id)}"]`);
+        if (l) t = l.textContent;
+      }
+      if (!t) t = r.closest("label")?.textContent || "";
+      return norm(t);
+    };
+
+    // Custom ATS questions often carry opaque uuid field names, so the
+    // question text has to be found in the DOM: walk up from the group and
+    // read what remains once the option labels are stripped away.
+    const findQuestionText = (group) => {
+      const opts = group.map(optionLabelOf).filter(Boolean);
+      let node = group[0].closest("div,fieldset")?.parentElement;
+      for (let i = 0; i < 5 && node; i++) {
+        let t = norm(node.textContent).slice(0, 400);
+        for (const o of opts) t = t.split(o).join(" ");
+        t = t.replace(/\s+/g, " ").trim();
+        if (t.length > 8) return t;
+        node = node.parentElement;
+      }
+      return "";
+    };
+
     const radios = [...document.querySelectorAll('input[type="radio"]')];
     const groups = {};
     radios.forEach((r) => {
@@ -434,7 +460,36 @@ const FillaFill = (() => {
          rg?.getAttribute("aria-label") ||
          g0.name || "").replace(/[\[\]_-]+/g, " ")
       );
-      const rule = rules.find((r) => r.eeo && r.re.test(groupText));
+      let rule = rules.find((r) => r.eeo && r.re.test(groupText));
+      if (!rule) {
+        const q = findQuestionText(group);
+        if (q) rule = rules.find((r) => r.eeo && r.re.test(q));
+      }
+
+      // Ashby-style combined question: "I'm authorized to work in the US"
+      // versus "I'm looking for visa sponsorship" as one group.
+      if (!rule) {
+        const joined = group.map(optionLabelOf).join(" | ");
+        if (/authoriz\w* to work/.test(joined) && /sponsorship/.test(joined)) {
+          let wantRe = null;
+          let key = null;
+          if (eeo?.requires_sponsorship === "yes") {
+            wantRe = /sponsorship/; key = "requires_sponsorship";
+          } else if (eeo?.work_authorized === "yes") {
+            wantRe = /authoriz\w* to work/; key = "work_authorized";
+          }
+          if (wantRe) {
+            const hit = group.find((r) => wantRe.test(optionLabelOf(r)));
+            if (hit) {
+              const ok = await clickRadio(hit);
+              satisfied.add(key);
+              report("Employment status", ok ? "filled" : "check");
+              await sleep(PACE);
+            }
+          }
+          continue;
+        }
+      }
       if (!rule || satisfied.has(rule.eeo)) continue;
       const name = EEO_NAMES[rule.eeo];
       const answer = eeo?.[rule.eeo];

@@ -13,6 +13,7 @@ const state = {
   fields: null,
   dirty: false,
   source: null,   // "claude" | "pdf"
+  score: null,    // {from, to}, kept across refinements
   zoom: 1,
   cancelId: null,
   busyReturn: "job",
@@ -71,7 +72,7 @@ async function getTab() {
 }
 
 const CONTENT_FILES = ["content/adapters.js", "content/autofill.js", "content/detector.js"];
-const CONTENT_VERSION = 3;
+const CONTENT_VERSION = 4;
 
 // Self-heal: after an extension reload, pages keep orphaned or outdated
 // content scripts. On a dead connection or an old version, inject the
@@ -180,7 +181,7 @@ async function detectJob() {
 
 function resetFlow() {
   state.appId = null; state.fields = null; state.source = null;
-  state.dirty = false; state.zoom = 1;
+  state.dirty = false; state.zoom = 1; state.score = null;
   $("stage-resume-label").textContent = "Resume";
   detectJob();
 }
@@ -189,6 +190,7 @@ function resetFlow() {
 
 $("apply").addEventListener("click", async () => {
   state.source = "claude";
+  state.score = null;
   $("stage-resume-label").textContent = "Resume";
   const signal = startBusy("job",
     "Claude is reading the posting and tailoring your resume. This usually takes a minute.");
@@ -302,8 +304,11 @@ function renderNotes(text) {
   scoreBox.innerHTML = "";
   list.innerHTML = "";
 
-  const m = text.match(/\b(\d{1,3})\s*(?:to|→|->)\s*(\d{1,3})\b/);
-  if (m) {
+  const m = text.match(/\b(\d{1,3})\s*(?:to|→|->|–)\s*(\d{1,3})\b/) ||
+            text.match(/score\D{0,20}?(\d{1,3})\D{1,20}?(\d{1,3})/i);
+  // Refinement notes carry no score, so the last known one stays up.
+  if (m) state.score = { from: m[1], to: m[2] };
+  if (state.score) {
     const label = document.createElement("span");
     label.className = "slabel";
     label.textContent = "Similarity score";
@@ -311,19 +316,19 @@ function renderNotes(text) {
     nums.className = "nums";
     const from = document.createElement("span");
     from.className = "from";
-    from.textContent = m[1];
+    from.textContent = state.score.from;
     const arrow = document.createElement("span");
     arrow.className = "arrow";
     arrow.textContent = " → ";
     const to = document.createElement("span");
     to.className = "to";
-    to.textContent = m[2];
+    to.textContent = state.score.to;
     nums.append(from, arrow, to);
     scoreBox.append(label, nums);
   }
 
   text.split("\n")
-    .map((l) => l.replace(/^[-•·*]\s*/, "").replace(/^Score\s+\d+\s*(?:to|→|->)\s*\d+[.,]?\s*/i, "").trim())
+    .map((l) => l.replace(/^[-•·*]\s*/, "").replace(/^Score:?\s*\d+\s*(?:to|→|->|–)\s*\d+[.,]?\s*/i, "").trim())
     .filter(Boolean)
     .forEach((line) => {
       const li = document.createElement("li");
