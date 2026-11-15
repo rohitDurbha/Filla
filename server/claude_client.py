@@ -61,7 +61,7 @@ def cancel(cancel_id: str) -> bool:
 
 
 def run_claude(prompt: str, cfg: dict, log: tuple | None = None,
-               cancel_id: str | None = None) -> str:
+               cancel_id: str | None = None, model: str | None = None) -> str:
     """Run claude -p with the prompt on stdin and return the text result.
 
     log, when given, is (directory, name): the exact prompt and raw answer
@@ -78,7 +78,7 @@ def run_claude(prompt: str, cfg: dict, log: tuple | None = None,
     cmd = [
         exe,
         "-p",
-        "--model", ccfg.get("model", "sonnet"),
+        "--model", model or ccfg.get("model", "sonnet"),
         "--output-format", "json",
     ] + list(ccfg.get("extra_args") or [])
 
@@ -175,17 +175,17 @@ def parse_tex_only(text: str) -> str:
     return m.group(1).strip()
 
 
-def tailor(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> dict:
-    return parse_delimited(run_claude(prompt, cfg, (log_dir, "tailor") if log_dir else None, cancel_id))
+def tailor(prompt: str, cfg: dict, log_dir=None, cancel_id=None, model=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "tailor") if log_dir else None, cancel_id, model))
 
 
-def revise(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> dict:
-    return parse_delimited(run_claude(prompt, cfg, (log_dir, "revise") if log_dir else None, cancel_id))
+def revise(prompt: str, cfg: dict, log_dir=None, cancel_id=None, model=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "revise") if log_dir else None, cancel_id, model))
 
 
-def repair(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> str:
-    return parse_tex_only(run_claude(prompt, cfg, (log_dir, "repair") if log_dir else None, cancel_id))
+def repair(prompt: str, cfg: dict, log_dir=None, cancel_id=None, model=None) -> str:
+    return parse_tex_only(run_claude(prompt, cfg, (log_dir, "repair") if log_dir else None, cancel_id, model))
 
 
-def refine(prompt: str, cfg: dict, log_dir=None, cancel_id=None) -> dict:
-    return parse_delimited(run_claude(prompt, cfg, (log_dir, "refine") if log_dir else None, cancel_id))
+def refine(prompt: str, cfg: dict, log_dir=None, cancel_id=None, model=None) -> dict:
+    return parse_delimited(run_claude(prompt, cfg, (log_dir, "refine") if log_dir else None, cancel_id, model))

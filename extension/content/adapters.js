@@ -17,6 +17,22 @@ const FillaAdapters = (() => {
     return new DOMParser().parseFromString(html, "text/html");
   }
 
+  // Extract a balanced JSON object starting at text[start], respecting
+  // strings. lastIndexOf('}') is wrong when code follows the object.
+  function balancedJson(text, start) {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (esc) { esc = false; continue; }
+      if (c === "\\") { esc = true; continue; }
+      if (inStr) { if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) return text.slice(start, i + 1);
+    }
+    return null;
+  }
+
   // Ashby embeds the posting as JSON in window.__appData inside a script
   // tag, which survives even on the bare /application route.
   function ashbyAppData(doc = document) {
@@ -25,9 +41,10 @@ const FillaAdapters = (() => {
       const i = t.indexOf("window.__appData");
       if (i === -1) continue;
       const start = t.indexOf("{", i);
-      const end = t.lastIndexOf("}");
-      if (start === -1 || end <= start) continue;
-      try { return JSON.parse(t.slice(start, end + 1)); } catch { /* keep looking */ }
+      if (start === -1) continue;
+      const raw = balancedJson(t, start);
+      if (!raw) continue;
+      try { return JSON.parse(raw); } catch { /* keep looking */ }
     }
     return null;
   }
@@ -100,11 +117,13 @@ const FillaAdapters = (() => {
     ashby: {
       hosts: /(^|\.)ashbyhq\.com$/,
       async scrape() {
+        const onApply = /\/application\/?$/.test(location.pathname);
         let data = ashbyAppData();
-        if (!data && /\/application\/?$/.test(location.pathname)) {
+        let overview = null;
+        if (!data && onApply) {
           try {
-            const doc = await fetchDoc(location.href.replace(/\/application\/?$/, ""));
-            data = ashbyAppData(doc);
+            overview = await fetchDoc(location.href.replace(/\/application\/?$/, ""));
+            data = ashbyAppData(overview);
           } catch {}
         }
         let title = "", description = "";
@@ -114,6 +133,17 @@ const FillaAdapters = (() => {
           if (!description) {
             const html = deepFind(data, ["descriptionHtml", "description"]);
             if (html) description = htmlToText(html);
+          }
+        }
+        // The application route's own DOM is just the form, so when the
+        // JSON route fails, the fetched overview page's text is the JD.
+        if (!description && onApply) {
+          if (!overview) {
+            try { overview = await fetchDoc(location.href.replace(/\/application\/?$/, "")); } catch {}
+          }
+          if (overview) {
+            title = title || text("h1", overview);
+            description = genericDescription(overview);
           }
         }
         return {
@@ -132,11 +162,20 @@ const FillaAdapters = (() => {
     smartrecruiters: {
       hosts: /(^|\.)smartrecruiters\.com$/,
       async scrape() {
+        let doc = document;
+        let description = text("#st-jobDescription", doc);
+        // Apply routes carry the form, not the posting text.
+        if (!description && /\/apply\/?$/.test(location.pathname)) {
+          try {
+            doc = await fetchDoc(location.href.replace(/\/apply\/?$/, ""));
+            description = text("#st-jobDescription", doc);
+          } catch {}
+        }
         return {
           ats: "smartrecruiters",
-          title: text("h1.job-title") || text("h1"),
-          company: text(".company-name") || document.title.split(" at ").pop()?.trim() || "",
-          description: text("#st-jobDescription") || genericDescription(),
+          title: text("h1.job-title", doc) || text("h1", doc) || text("h1"),
+          company: text(".company-name", doc) || document.title.split(" at ").pop()?.trim() || "",
+          description: description || genericDescription(doc),
         };
       },
       hints: {
@@ -145,6 +184,30 @@ const FillaAdapters = (() => {
         email: ['input[name="email"]'],
         phone: ['input[name="phoneNumber"]'],
         resume: ['input[type="file"]'],
+      },
+    },
+
+    workday: {
+      hosts: /(^|\.)(myworkdayjobs|myworkdaysite)\.com$/,
+      async scrape() {
+        return {
+          ats: "workday",
+          title: text('[data-automation-id="jobPostingHeader"]') || text("h1") ||
+                 text("h2[data-automation-id]"),
+          company: location.hostname.split(".")[0] || "",
+          description: text('[data-automation-id="jobPostingDescription"]') ||
+                       genericDescription(),
+        };
+      },
+      // Workday marks everything with data-automation-id attributes, which
+      // are far more stable than its generated class names.
+      hints: {
+        first_name: ['input[data-automation-id="legalNameSection_firstName"]'],
+        last_name: ['input[data-automation-id="legalNameSection_lastName"]'],
+        email: ['input[data-automation-id="email"]'],
+        phone: ['input[data-automation-id="phone-number"]'],
+        location: ['input[data-automation-id="addressSection_city"]'],
+        resume: ['input[data-automation-id="file-upload-input-ref"]', 'input[type="file"]'],
       },
     },
   };

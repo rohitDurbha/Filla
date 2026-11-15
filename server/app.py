@@ -65,12 +65,14 @@ class TailorRequest(BaseModel):
     job: Job
     track: str
     cancel_id: str = ""
+    model: str = ""
 
 
 class ReviseRequest(BaseModel):
     app_id: str
     fields: dict
     cancel_id: str = ""
+    model: str = ""
 
 
 class CancelRequest(BaseModel):
@@ -81,6 +83,7 @@ class RefineRequest(BaseModel):
     app_id: str
     instruction: str
     cancel_id: str = ""
+    model: str = ""
 
 
 class LocateRequest(BaseModel):
@@ -194,6 +197,103 @@ class SetupRequest(BaseModel):
     rules: str
 
 
+_limits_cache: dict = {"ts": 0.0, "data": None}
+
+
+@app.get("/limits")
+def limits():
+    """Best-effort Claude subscription usage, read the same way Claude Code
+    reads it: the OAuth token from ~/.claude/.credentials.json against the
+    usage endpoint. Unofficial, so any failure just reports unavailable and
+    the panel hides the bars."""
+    import os
+    import time as _time
+    import urllib.request
+
+    if _time.time() - _limits_cache["ts"] < 60 and _limits_cache["data"]:
+        return _limits_cache["data"]
+
+    def unavailable():
+        return {"available": False}
+
+    try:
+        cfg_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
+        creds = json.loads((cfg_dir / ".credentials.json").read_text())
+        token = creds["claudeAiOauth"]["accessToken"]
+        req = urllib.request.Request(
+            "https://api.anthropic.com/api/oauth/usage",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "anthropic-beta": "oauth-2025-04-20",
+                "User-Agent": "filla",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = json.load(r)
+
+        def window(node):
+            if not isinstance(node, dict):
+                return None
+            pct = node.get("utilization", node.get("used_percentage"))
+            if pct is None:
+                return None
+            pct = float(pct)
+            if pct <= 1:
+                pct *= 100
+            resets = node.get("resets_at")
+            if isinstance(resets, (int, float)):
+                from datetime import datetime, timezone
+                resets = datetime.fromtimestamp(resets, timezone.utc).isoformat()
+            return {"pct": round(pct, 1), "resets_at": resets}
+
+        def find(node, key, depth=0):
+            if not isinstance(node, dict) or depth > 4:
+                return None
+            if key in node:
+                return node[key]
+            for v in node.values():
+                hit = find(v, key, depth + 1)
+                if hit is not None:
+                    return hit
+            return None
+
+        five = window(find(raw, "five_hour"))
+        seven = window(find(raw, "seven_day"))
+        if not five and not seven:
+            return unavailable()
+        data = {"available": True, "five_hour": five, "seven_day": seven}
+        _limits_cache.update(ts=_time.time(), data=data)
+        return data
+    except Exception:
+        return unavailable()
+
+
+class TrackAddRequest(BaseModel):
+    name: str
+    tex: str
+
+
+@app.post("/tracks")
+def add_track(req: TrackAddRequest):
+    """Add a resume track after initial setup, from the profile page."""
+    if not req.name.strip() or not req.tex.strip():
+        raise HTTPException(400, "A track needs both a name and its LaTeX source.")
+    if "\\documentclass" not in req.tex:
+        raise HTTPException(400, "That does not look like a complete .tex file (no \\documentclass found).")
+    tracks = CFG.setdefault("tracks", {})
+    key = re.sub(r"[^a-z0-9]+", "_", req.name.lower()).strip("_")[:24] or "track"
+    base, n = key, 2
+    while key in tracks:
+        key = f"{base}{n}"
+        n += 1
+    resumes_dir = SERVER / "resumes"
+    resumes_dir.mkdir(exist_ok=True)
+    (resumes_dir / f"{key}.tex").write_text(req.tex)
+    tracks[key] = {"name": req.name.strip(), "resume": f"resumes/{key}.tex"}
+    (ROOT / "config.yaml").write_text(yaml.safe_dump(CFG, sort_keys=False))
+    return {"ok": True, "tracks": {k: v["name"] for k, v in tracks.items()}}
+
+
 @app.post("/setup")
 def setup(req: SetupRequest):
     """First-run wizard: receives everything personal from the extension
@@ -262,7 +362,8 @@ def tailor(req: TailorRequest):
 
     try:
         result = claude_client.tailor(prompt, CFG, log_dir=run_dir,
-                                      cancel_id=req.cancel_id or None)
+                                      cancel_id=req.cancel_id or None,
+                                      model=req.model or None)
     except claude_client.ClaudeCancelled:
         raise HTTPException(409, "Cancelled.")
     except claude_client.ClaudeError as e:
@@ -283,7 +384,8 @@ def revise(req: ReviseRequest):
     )
     try:
         result = claude_client.revise(prompt, CFG, log_dir=d,
-                                      cancel_id=req.cancel_id or None)
+                                      cancel_id=req.cancel_id or None,
+                                      model=req.model or None)
     except claude_client.ClaudeCancelled:
         raise HTTPException(409, "Cancelled.")
     except claude_client.ClaudeError as e:
@@ -342,7 +444,8 @@ def refine(req: RefineRequest):
     )
     try:
         result = claude_client.refine(prompt, CFG, log_dir=d,
-                                      cancel_id=req.cancel_id or None)
+                                      cancel_id=req.cancel_id or None,
+                                      model=req.model or None)
     except claude_client.ClaudeCancelled:
         raise HTTPException(409, "Cancelled.")
     except claude_client.ClaudeError as e:

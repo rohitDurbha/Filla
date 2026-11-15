@@ -68,6 +68,25 @@ header {
 #server-dot .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); }
 #server-dot.ok .dot { background: var(--ok); }
 
+/* ---- Claude plan usage ---- */
+.limits { display: flex; gap: 16px; padding: 0 18px 10px; }
+.lim {
+  flex: 1; display: flex; align-items: center; gap: 7px;
+  font-size: 10px; color: var(--muted);
+}
+.lim .lk { font-weight: 700; }
+.lbar {
+  flex: 1; height: 4px; background: var(--line);
+  border-radius: 2px; overflow: hidden;
+}
+.lbar i {
+  display: block; height: 100%; width: 0%; background: var(--accent);
+  border-radius: 2px; transition: width 0.5s ease;
+}
+.lbar i.warn { background: var(--warn); }
+.lbar i.full { background: var(--err); }
+.lim em { font-style: normal; white-space: nowrap; }
+
 /* ---- stage rail ---- */
 .stages { padding: 4px 18px 14px; position: relative; }
 .track {

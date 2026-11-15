@@ -72,7 +72,7 @@ async function getTab() {
 }
 
 const CONTENT_FILES = ["content/adapters.js", "content/autofill.js", "content/detector.js"];
-const CONTENT_VERSION = 4;
+const CONTENT_VERSION = 5;
 
 // Self-heal: after an extension reload, pages keep orphaned or outdated
 // content scripts. On a dead connection or an old version, inject the
@@ -117,6 +117,37 @@ $("busy-cancel").addEventListener("click", () => {
   if (state.busyReturn === "review") renderEditor(state.fields);
   show(state.busyReturn || "job");
 });
+
+// ---------- Claude plan usage ----------
+
+function fmtReset(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const soon = d - Date.now() < 22 * 3600 * 1000;
+  return soon ? t : d.toLocaleDateString([], { weekday: "short" }) + " " + t;
+}
+
+async function loadLimits() {
+  try {
+    const l = await api("/limits");
+    if (!l.available) return $("limits").classList.add("hidden");
+    const put = (w, barId, txtId) => {
+      const bar = $(barId), txt = $(txtId);
+      if (!w) { bar.style.width = "0%"; txt.textContent = ""; return; }
+      bar.style.width = Math.min(100, w.pct) + "%";
+      bar.className = w.pct >= 90 ? "full" : w.pct >= 75 ? "warn" : "";
+      const reset = fmtReset(w.resets_at);
+      txt.textContent = Math.round(w.pct) + "%" + (reset ? " · " + reset : "");
+    };
+    put(l.five_hour, "lim5", "lim5t");
+    put(l.seven_day, "lim7", "lim7t");
+    $("limits").classList.remove("hidden");
+  } catch {
+    $("limits").classList.add("hidden");
+  }
+}
 
 // ---------- startup ----------
 
@@ -203,7 +234,9 @@ $("apply").addEventListener("click", async () => {
       },
       track: $("track").value,
       cancel_id: state.cancelId,
+      model: $("model").value,
     }, signal);
+    loadLimits();
     if (document.hidden) {
       try {
         chrome.notifications.create({
@@ -347,6 +380,7 @@ $("refine-go").addEventListener("click", async () => {
   try {
     const out = await api("/refine", {
       app_id: state.appId, instruction, cancel_id: state.cancelId,
+      model: $("model").value,
     }, signal);
     $("refine-text").value = "";
     state.fields = out.fields;
@@ -476,6 +510,7 @@ $("review-approve").addEventListener("click", async () => {
     try {
       const out = await api("/revise", {
         app_id: state.appId, fields: state.fields, cancel_id: state.cancelId,
+        model: $("model").value,
       }, signal);
       state.fields = out.fields;
       state.dirty = false;
@@ -685,5 +720,15 @@ chrome.tabs.onActivated.addListener(() => {
   if (currentView === "nosite" || currentView === "job") detectJob();
 });
 
+// remember the model choice across sessions
+chrome.storage.local.get("fillaModel").then(({ fillaModel }) => {
+  if (fillaModel !== undefined) $("model").value = fillaModel;
+});
+$("model").addEventListener("change", () => {
+  chrome.storage.local.set({ fillaModel: $("model").value });
+});
+
 checkServer().then(detectJob);
+loadLimits();
 setInterval(checkServer, 30000);
+setInterval(loadLimits, 300000);

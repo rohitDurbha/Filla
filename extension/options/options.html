@@ -80,6 +80,33 @@
       Everything stays in your browser and you can change it any time.
     </p>
 
+    <div class="card" id="tracks-card">
+      <h2>Resume tracks</h2>
+      <p>The base resumes you apply with. Add one any time, no setup rerun
+      needed. Requires the Filla server to be running.</p>
+      <div id="track-list" style="margin:10px 0 4px; color:var(--muted); font-size:13px"></div>
+      <label>New track name
+        <input type="text" id="nt-name" placeholder="Machine Learning Engineering"
+               style="width:100%; margin-top:6px; padding:9px 11px; font-size:13.5px;
+                      background:var(--bg); color:var(--text); font-family:inherit;
+                      border:1px solid var(--line); border-radius:9px;" />
+      </label>
+      <label>LaTeX source
+        <textarea id="nt-tex" placeholder="\documentclass..." spellcheck="false"
+                  style="width:100%; min-height:110px; margin-top:6px; padding:9px 11px;
+                         font:11.5px/1.5 ui-monospace, Consolas, monospace; white-space:pre;
+                         background:var(--bg); color:var(--text);
+                         border:1px solid var(--line); border-radius:9px; resize:vertical;"></textarea>
+      </label>
+      <div class="actions" style="margin-top:14px">
+        <button id="nt-add">Add track</button>
+        <button id="nt-upload" style="background:var(--card); color:var(--muted);
+                border:1px solid var(--line); box-shadow:none">Upload .tex</button>
+        <input type="file" id="nt-file" accept=".tex,text/plain" hidden />
+        <span id="nt-msg" style="font-size:13px"></span>
+      </div>
+    </div>
+
     <div class="card">
       <h2>Self identification</h2>
       <p>Picking Skip leaves the question untouched on applications.</p>

@@ -546,6 +546,59 @@ const FillaFill = (() => {
       }
     }
 
+    // 6. Listbox dropdowns. Workday renders its voluntary-disclosure
+    //    questions as buttons that open an option menu. The
+    //    data-automation-id names the question more reliably than any label.
+    const WD_KEY = (id) => {
+      const s = id.toLowerCase();
+      if (s.includes("gender")) return "gender";
+      if (s.includes("hispanic")) return "hispanic_latino";
+      if (s.includes("ethnic")) return "race";
+      if (s.includes("veteran")) return "veteran";
+      if (s.includes("disab")) return "disability";
+      return null;
+    };
+    const listBtns = [...document.querySelectorAll('button[aria-haspopup="listbox"]')]
+      .filter(visible);
+    for (const btn of listBtns) {
+      const daid = btn.getAttribute("data-automation-id") || "";
+      let key = WD_KEY(daid);
+      if (!key) {
+        const q = findQuestionText([btn]) ||
+                  norm(daid.replace(/[-_]+/g, " "));
+        const rule = rules.find((r) => r.eeo && r.re.test(q));
+        key = rule?.eeo || null;
+      }
+      if (!key || satisfied.has(key)) continue;
+      const name = EEO_NAMES[key];
+      const answer = eeo?.[key];
+      if (!answer) { report(name, "skipped"); continue; }
+      const syn = EEO_OPTION_SYNONYMS[key]?.[answer] || [answer];
+
+      flash(btn);
+      fireClick(btn);
+      await sleep(300);
+      const opts = [...document.querySelectorAll(
+        '[role="option"], ul[role="listbox"] li, div[role="listbox"] > div'
+      )].filter(visible);
+      let hit = null;
+      for (const w of syn) {
+        hit = opts.find((o) => norm(o.textContent).includes(w));
+        if (hit) break;
+      }
+      if (hit) {
+        fireClick(hit);
+        await sleep(250);
+        const ok = syn.some((w) => norm(btn.textContent).includes(w));
+        satisfied.add(key);
+        report(name, ok ? "filled" : "check");
+        await sleep(PACE);
+      } else {
+        btn.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        report(name, "skipped");
+      }
+    }
+
     progress("", "done");
     return {
       filled: [...new Set(filled)],

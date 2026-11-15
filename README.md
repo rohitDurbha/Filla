@@ -1,156 +1,122 @@
 # Filla
 
-A personal Chrome extension that tailors your resume with your own Claude for
-every job you apply to, then autofills the application. Built around a simple
+A Chrome extension that tailors your resume with your own Claude for every
+job you apply to, then fills the application for you. Built around a simple
 idea. A profile saved once goes stale, but a resume rewritten per job
-description stays sharp, so the tailoring step belongs inside the apply loop.
+description stays sharp, so the tailoring step belongs inside the apply
+loop.
 
-Everything runs locally and everything is free and open source. Claude usage
-rides on your existing Claude subscription through Claude Code headless mode,
-so no API key is needed anywhere.
+Everything runs locally and everything is free and open source. Claude
+usage rides on your existing Claude subscription through Claude Code, so
+no API key exists anywhere in this project.
 
-## How the loop works
+## Features
 
-1. Open a job posting on Greenhouse, Lever, Ashby, or SmartRecruiters. The
-   side panel picks up the posting and suggests a resume track.
-2. Click Tailor with Claude. The job description and the matching master
-   resume go to your local Claude, which returns a tailored .tex plus a
-   structured JSON of every field in it. The server compiles the PDF with
-   Tectonic.
-3. Review the extracted fields in the panel and edit anything that looks off.
-   Edits are applied back into the LaTeX and the PDF is rebuilt.
-4. Approve the final PDF. It downloads to your machine automatically.
-5. Click Fill this page. The extension uploads the tailored PDF, fills the
-   standard fields, and answers the EEO questions from your one-time profile.
-   On multi-step applications you click fill once per page.
-6. Mark applied. The application lands in a local SQLite log.
+- **Per-job tailoring with your own Claude.** One click sends the job
+  description and your base resume through your tailoring rules. Claude
+  scores the resume against the posting, weaves missing keywords into
+  honest bullets, and returns a recruiter-ready one-page PDF compiled
+  with Tectonic.
+- **GitHub-aware project selection.** Filla keeps a cached inventory of
+  your public repositories, so Claude swaps projects in and out per job
+  based on what actually fits, grounded in each repo's README.
+- **Review everything before it ships.** An editable field-by-field
+  review screen, a similarity score showing before and after, collapsible
+  notes on what changed, and a free-form box to ask Claude for further
+  refinements.
+- **Full LaTeX control.** Zoom the final preview, double-click any spot
+  on it to jump to that exact place in the LaTeX source, edit, and
+  recompile. Compile errors go back to Claude for one automatic repair
+  pass first.
+- **Verified autofill that walks the page.** Filling scrolls to each
+  field, flashes it, and streams a live feed. A checkmark means the value
+  verifiably landed. Anything uncertain goes to a double-check list, so
+  the feed never lies. Standard and custom EEO questions fill from a
+  one-time profile stored only in your browser.
+- **Bring a PDF instead.** Already have a tailored resume? Drop it on the
+  panel and Filla extracts your details locally, no AI involved, and
+  fills with that.
+- **Model choice and plan visibility.** Pick Sonnet, Opus, or Haiku per
+  tailoring run, and see your Claude plan's 5-hour and 7-day usage bars
+  with reset times at the top of the panel.
+- **A tracker you never maintain.** Every posting you tailor for is a
+  Seen row, every application you mark applied moves to Submitted
+  history, one row per job, at localhost:8765/tracker.
+- **Thoughtful flow details.** Draggable in-page launcher, cancellable
+  Claude calls that actually kill the process, desktop notification when
+  tailoring finishes while you are on another tab, and a guided setup
+  wizard so nobody edits files by hand.
 
-Already have a tailored PDF? Drop it onto the panel (or click Use a PDF I
-already have) and Filla skips Claude entirely. Contact fields are extracted
-locally with simple heuristics, you fix anything they missed, and the fill
-step works exactly the same.
+## Supported job sites
 
-When a tailored resume fails to compile, the server hands the compiler error
-back to Claude for one automatic repair round before giving up, and the panel
-shows the real error lines from the TeX log if it still fails.
+Greenhouse, Lever, Ashby, and SmartRecruiters are the primary surfaces,
+including their application-form pages. Workday is supported as a newer
+surface. Basics, resume upload, and the voluntary-disclosure dropdowns
+fill through Workday's stable automation ids, and its multi-step flow
+works with one Fill per page, though its stranger widgets land in the
+double-check list by design. Expect to confirm more by hand there while
+this surface matures.
 
-The structured JSON is the backbone of the design. Claude wrote the resume,
-so Claude already knows every field in it, which means no PDF parsing or
-recognition step is ever needed.
+## Getting started
 
-## Setup
+Three things need to exist on the computer once. Python 3.10 or newer,
+Tectonic (the LaTeX compiler, `brew install tectonic` on a Mac), and
+Claude Code installed and logged in with a Claude Pro or Max account.
 
-Fastest path, from the repo root:
+1. Download this repository (Code, then Download ZIP, works fine).
+2. Double-click `start-mac.command` on macOS or `start-windows.bat` on
+   Windows, and keep that window open while applying. The first run
+   builds everything it needs.
+3. Open `chrome://extensions`, turn on Developer mode, click Load
+   unpacked, and select the `extension/` folder.
 
-```bash
-./setup.sh
-```
+The setup wizard opens on install and handles the rest in the browser.
+It live-checks the environment, then collects your GitHub username, your
+resume tracks (paste or upload each .tex), your tailoring rules (start
+from the proven pipeline template, upload a rules.md, or write your own),
+and your one-time application answers. Start Filla writes it all to the
+server, and you are ready to apply.
 
-The script checks prerequisites (Python, Tectonic, Claude Code), builds the
-virtualenv, installs dependencies, and lists exactly which personal pieces
-you still need to add. The sections below cover the same ground by hand.
+Prefer the terminal? `./setup.sh` checks prerequisites and builds the
+virtualenv, and `cd server && ./run.sh` starts the server with
+auto-reload.
 
-### 1. Server
+## Daily loop
 
-```bash
-cd server
-pip install -r requirements.txt
-```
+Open a job posting, click the F chip, pick a track and model, and Tailor
+with Claude. Review the fields, refine if needed, approve the PDF, and
+Fill this page. On multi-step applications click Fill again after each
+step. Mark applied moves the job into your Submitted history.
 
-Install Tectonic for LaTeX compilation (single binary, no TeX Live needed).
+## Adding things later
 
-```bash
-brew install tectonic        # macOS
-# or: cargo install tectonic
-```
-
-Make sure Claude Code is installed and logged in with your Claude account.
-
-```bash
-claude --version
-```
-
-Drop your files into `server/resumes/` as described in the README there
-(four .tex resumes plus rules.md), then start the server.
-
-```bash
-./run.sh
-```
-
-The script frees port 8765 if an old server still holds it, activates the
-virtualenv, and runs with auto-reload, so code changes and git pulls apply
-without restarting. Stop with Ctrl+C. Avoid Ctrl+Z, which suspends the
-process and keeps the port, though run.sh clears that up on the next start
-either way.
-
-### 2. Extension
-
-1. Open `chrome://extensions`, turn on Developer mode.
-2. Click Load unpacked and select the `extension/` folder.
-3. The one-time profile page opens on first install. Fill in the EEO answers
-   once (gender, race, veteran status, work authorization, sponsorship, and
-   so on). They are stored only in your browser.
-4. Pin Filla and click the icon on any supported job page to open the panel.
-
-## Configuration
-
-Everything lives in `config.yaml` at the repo root. The model, the resume
-track names and paths, the downloaded PDF filename, and timeouts.
+The Profile page (footer link) holds your one-time application answers
+and lets you add new resume tracks any time without rerunning setup.
+`config.yaml` at the repo root holds the model default, timeouts, GitHub
+settings, and the PDF filename recruiters see. Every tailoring run keeps
+an audit trail under `server/runs/` with the exact prompt and response.
 
 ## Sharing Filla with someone else
 
-Nothing personal is baked into the code. Everything that makes Filla yours
-lives in exactly three places, all gitignored or plainly editable:
+Nothing personal is baked into the code. A friend downloads the repo,
+installs the three prerequisites, double-clicks the starter for their
+system, loads the extension, and the wizard makes Filla theirs with
+their own Claude login, GitHub, resumes, and rules. Mac and Windows both
+work. The server is plain Python with portable paths, and both Tectonic
+and Claude Code ship Windows builds.
 
-1. `config.yaml` carries your GitHub username, your resume track names and
-   paths, and the PDF filename recruiters see.
-2. `server/resumes/` holds your .tex resumes and your rules.md. The rules
-   file is the heart of the system, since it tells Claude what may change,
-   what stays frozen, and how projects get picked from GitHub.
-3. The one-time profile (work authorization, EEO answers) lives only in
-   each person's own browser storage.
+## Notes on usage
 
-A friend gets their own Filla with no terminal and no file editing:
+Headless Claude Code calls draw from your Claude subscription limits,
+the same pool as interactive use. The usage bars in the panel read the
+same data Claude Code itself reads, through an unofficial endpoint, so
+if they ever stop appearing the feature has hidden itself harmlessly.
+At heavy volume, the per-run model picker helps. Haiku is a fine
+tailor for routine postings and spends far less of the window.
 
-1. Download the repo (Code, Download ZIP works fine) and install the three
-   prerequisites once: Python, Tectonic, and Claude Code logged in with
-   their own Claude account.
-2. Double-click `start-mac.command` (Mac) or `start-windows.bat` (Windows)
-   and keep the window open. First run installs everything it needs.
-3. Load `extension/` unpacked at chrome://extensions. The setup wizard
-   opens by itself: it checks the environment live, then collects their
-   GitHub username, resume tracks (paste or upload each .tex), tailoring
-   rules (a starter template is one click away), and the one-time
-   application answers, and writes it all to their server on Start.
+## Privacy
 
-Claude usage rides on each person's own subscription through their own
-Claude Code login, so nobody shares accounts or keys. The server is plain
-Python with portable paths, and both Tectonic and Claude Code ship Windows
-builds, so Mac and Windows both work.
-
-The extension loads unpacked because the Chrome Web Store is built for
-hosted apps, while Filla deliberately keeps everything local to the user's
-machine. If this ever grows beyond friends, publishing to the store with a
-guided first-run setup would be the next step.
-
-## Application tracker
-
-Every tailored resume and every application marked applied is logged to a
-local SQLite database at `server/filla.db`. View it any time at
-http://localhost:8765/tracker, or from the Applications link in the
-panel's footer. The raw data is also served as JSON at /applications for
-anything you want to build on top of it.
-
-## Notes on usage limits
-
-Headless Claude Code calls draw from your Claude subscription limits, the
-same pool as interactive use. At heavy volume (40 to 50 applications per
-day) you may bump into the five hour usage windows on busy days. Spreading
-sessions across the day helps, and `claude.extra_args` in config.yaml
-accepts a fallback model if you ever want one.
-
-## Status
-
-v0.1 scaffold. Working surface areas are Greenhouse, Lever, Ashby, and
-SmartRecruiters. Workday support is planned for a later version since its
-multi-page flow needs its own adapter work.
+Your resumes, rules, tailored PDFs, application log, and EEO answers
+never leave your machine except as part of applications you submit
+yourself. The only network calls are to your own Claude account, the
+public GitHub API for your repo inventory, and the job sites you visit.

@@ -13,6 +13,11 @@
     <span id="server-dot" title="Checking the local server"><span class="dot"></span><span id="server-label">server</span></span>
   </header>
 
+  <div id="limits" class="limits hidden" title="Your Claude plan usage">
+    <div class="lim"><span class="lk">5h</span><div class="lbar"><i id="lim5"></i></div><em id="lim5t"></em></div>
+    <div class="lim"><span class="lk">7d</span><div class="lbar"><i id="lim7"></i></div><em id="lim7t"></em></div>
+  </div>
+
   <nav class="stages" aria-label="Application progress">
     <div class="track"><div id="track-fill"></div></div>
     <ol id="stage-list">
@@ -54,6 +59,14 @@
         <select id="track"></select>
       </label>
       <p id="track-hint" class="muted small"></p>
+      <label class="field">Claude model
+        <select id="model">
+          <option value="">Default from config</option>
+          <option value="sonnet">Sonnet</option>
+          <option value="opus">Opus</option>
+          <option value="haiku">Haiku</option>
+        </select>
+      </label>
       <button id="apply" class="primary">Tailor with Claude</button>
       <button id="upload-btn" class="ghost wide">Use an existing PDF</button>
       <input type="file" id="upload-input" accept="application/pdf" hidden />
