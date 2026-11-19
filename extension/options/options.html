@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Filla one-time profile</title>
+  <title>Filla profile</title>
   <style>
     :root {
       --bg: #F6F6F9; --card: #FFFFFF; --line: #E8E9F0;
@@ -47,13 +47,13 @@
     .card h2 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
     .card p { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
     label { display: block; margin-top: 14px; font-weight: 600; font-size: 13px; }
-    select {
+    select, #profile-form input[type=text] {
       width: 100%; margin-top: 6px; padding: 9px 11px; font-size: 13.5px;
       background: var(--bg); color: var(--text); font-family: inherit;
       border: 1px solid var(--line); border-radius: 9px;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
-    select:focus {
+    select:focus, #profile-form input:focus {
       outline: none; border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-soft);
     }
@@ -73,11 +73,12 @@
 <body>
   <div class="wrap">
     <div class="logo">Filla<i></i></div>
-    <h1>One-time profile</h1>
+    <h1>Profile</h1>
     <p class="note">
-      US applications ask a handful of questions that never appear on a resume.
-      Answer them once here and every application gets filled the same way.
-      Everything stays in your browser and you can change it any time.
+      Applications ask plenty that never appears on a resume, from your
+      legal name and street address to work eligibility. Answer once here
+      and every application gets filled the same way. Everything stays in
+      your browser and you can change it any time.
     </p>
 
     <div class="card" id="tracks-card">
@@ -107,82 +108,7 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2>Self identification</h2>
-      <p>Picking Skip leaves the question untouched on applications.</p>
-
-      <label>Gender
-        <select id="gender">
-          <option value="">Skip this question</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-          <option value="nonbinary">Non-binary</option>
-          <option value="decline">Decline to self-identify</option>
-        </select>
-      </label>
-
-      <label>Are you Hispanic or Latino?
-        <select id="hispanic_latino">
-          <option value="">Skip this question</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-          <option value="decline">Decline to self-identify</option>
-        </select>
-      </label>
-
-      <label>Race
-        <select id="race">
-          <option value="">Skip this question</option>
-          <option value="american_indian">American Indian or Alaska Native</option>
-          <option value="asian">Asian</option>
-          <option value="black">Black or African American</option>
-          <option value="hispanic">Hispanic or Latino</option>
-          <option value="pacific_islander">Native Hawaiian or Other Pacific Islander</option>
-          <option value="white">White</option>
-          <option value="two_or_more">Two or More Races</option>
-          <option value="decline">Decline to self-identify</option>
-        </select>
-      </label>
-
-      <label>Protected veteran status
-        <select id="veteran">
-          <option value="">Skip this question</option>
-          <option value="not_protected">I am not a protected veteran</option>
-          <option value="protected">I identify as one or more classes of protected veteran</option>
-          <option value="decline">I do not wish to answer</option>
-        </select>
-      </label>
-
-      <label>Disability status
-        <select id="disability">
-          <option value="">Skip this question</option>
-          <option value="yes">Yes, I have a disability (or previously had one)</option>
-          <option value="no">No, I do not have a disability</option>
-          <option value="decline">I do not want to answer</option>
-        </select>
-      </label>
-    </div>
-
-    <div class="card">
-      <h2>Work eligibility</h2>
-      <p>Asked on nearly every application in the United States.</p>
-
-      <label>Are you legally authorized to work in the United States?
-        <select id="work_authorized">
-          <option value="">Skip this question</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
-      </label>
-
-      <label>Will you now or in the future require sponsorship?
-        <select id="requires_sponsorship">
-          <option value="">Skip this question</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
-      </label>
-    </div>
+    <div id="profile-form"></div>
 
     <div class="actions">
       <button id="save">Save profile</button>
@@ -190,6 +116,7 @@
     </div>
   </div>
 
+  <script src="../common/profile.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

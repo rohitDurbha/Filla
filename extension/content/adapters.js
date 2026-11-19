@@ -65,6 +65,25 @@ const FillaAdapters = (() => {
     return div.innerText.replace(/\n{3,}/g, "\n\n");
   };
 
+  // https://acme.wd5.myworkdayjobs.com/en-US/External/job/Dallas-TX/Analyst_R1/apply
+  //   -> https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/External/job/Dallas-TX/Analyst_R1
+  // https://wd5.myworkdaysite.com/recruiting/acme/External/job/X/Y_R1
+  //   -> https://wd5.myworkdaysite.com/wday/cxs/acme/External/job/X/Y_R1
+  function workdayCxsUrl(loc) {
+    let segs = loc.pathname.split("/").filter(Boolean);
+    let tenant = loc.hostname.split(".")[0];
+    if (segs[0] === "recruiting") { tenant = segs[1]; segs = segs.slice(2); }
+    if (/^[a-z]{2}-[A-Z]{2}$/.test(segs[0] || "")) segs = segs.slice(1);
+    const site = segs[0];
+    const j = segs.indexOf("job");
+    if (!site || j < 1) return null;
+    const rest = segs.slice(j);
+    const cut = rest.findIndex((s, i) => i > 0 && /^apply/i.test(s));
+    const jobPath = (cut > -1 ? rest.slice(0, cut) : rest).join("/");
+    if (jobPath.split("/").length < 2) return null;
+    return `${loc.origin}/wday/cxs/${tenant}/${site}/${jobPath}`;
+  }
+
   const adapters = {
     greenhouse: {
       hosts: /(^|\.)greenhouse\.io$/,
@@ -110,7 +129,7 @@ const FillaAdapters = (() => {
         linkedin: ['input[name="urls[LinkedIn]"]'],
         github: ['input[name="urls[GitHub]"]', 'input[name="urls[Github]"]'],
         website: ['input[name="urls[Portfolio]"]', 'input[name="urls[Other]"]'],
-        resume: ['input[name="resume"]', 'input[type="file"]'],
+        resume: ['input[name="resume"]'],
       },
     },
 
@@ -154,9 +173,7 @@ const FillaAdapters = (() => {
           description: (description || genericDescription()).slice(0, 18000),
         };
       },
-      hints: {
-        resume: ['input[type="file"]'],
-      },
+      hints: {},
     },
 
     smartrecruiters: {
@@ -183,31 +200,52 @@ const FillaAdapters = (() => {
         last_name: ['input[name="lastName"]', "#last-name"],
         email: ['input[name="email"]'],
         phone: ['input[name="phoneNumber"]'],
-        resume: ['input[type="file"]'],
       },
     },
 
     workday: {
       hosts: /(^|\.)(myworkdayjobs|myworkdaysite)\.com$/,
       async scrape() {
+        // Every Workday page, including sign in and account creation inside
+        // the apply flow, keeps the job path in its URL. Workday serves the
+        // posting as JSON at /wday/cxs/<tenant>/<site>/job/..., same origin.
+        let title = "", description = "", company = "";
+        const cxs = workdayCxsUrl(location);
+        if (cxs) {
+          try {
+            const r = await fetch(cxs, { credentials: "same-origin",
+                                         headers: { Accept: "application/json" } });
+            if (r.ok) {
+              const data = await r.json();
+              const info = data.jobPostingInfo || {};
+              title = info.title || "";
+              description = info.jobDescription ? htmlToText(info.jobDescription) : "";
+              company = data.hiringOrganization?.name || "";
+            }
+          } catch {}
+        }
+        const tenant = location.hostname.split(".")[0] || "";
         return {
           ats: "workday",
-          title: text('[data-automation-id="jobPostingHeader"]') || text("h1") ||
-                 text("h2[data-automation-id]"),
-          company: location.hostname.split(".")[0] || "",
-          description: text('[data-automation-id="jobPostingDescription"]') ||
-                       genericDescription(),
+          title: title || text('[data-automation-id="jobPostingHeader"]') || text("h2") || text("h1"),
+          company: company || tenant,
+          description: (description || text('[data-automation-id="jobPostingDescription"]') ||
+                        genericDescription()).slice(0, 18000),
         };
       },
-      // Workday marks everything with data-automation-id attributes, which
-      // are far more stable than its generated class names.
+      // Workday names fields with data-automation-id in older tenants and
+      // with ids like "name--legalName--firstName" in newer ones.
       hints: {
-        first_name: ['input[data-automation-id="legalNameSection_firstName"]'],
-        last_name: ['input[data-automation-id="legalNameSection_lastName"]'],
-        email: ['input[data-automation-id="email"]'],
-        phone: ['input[data-automation-id="phone-number"]'],
-        location: ['input[data-automation-id="addressSection_city"]'],
-        resume: ['input[data-automation-id="file-upload-input-ref"]', 'input[type="file"]'],
+        first_name: ['input[data-automation-id="legalNameSection_firstName"]', 'input[id$="legalName--firstName"]'],
+        middle_name: ['input[data-automation-id="legalNameSection_middleName"]', 'input[id$="legalName--middleName"]'],
+        last_name: ['input[data-automation-id="legalNameSection_lastName"]', 'input[id$="legalName--lastName"]'],
+        email: ['input[data-automation-id="email"]', 'input[id$="--email"]'],
+        phone: ['input[data-automation-id="phone-number"]', 'input[id$="phoneNumber--phoneNumber"]'],
+        address_line1: ['input[data-automation-id="addressSection_addressLine1"]', 'input[id$="address--addressLine1"]'],
+        address_line2: ['input[data-automation-id="addressSection_addressLine2"]', 'input[id$="address--addressLine2"]'],
+        city: ['input[data-automation-id="addressSection_city"]', 'input[id$="address--city"]'],
+        postal_code: ['input[data-automation-id="addressSection_postalCode"]', 'input[id$="address--postalCode"]'],
+        resume: ['input[data-automation-id="file-upload-input-ref"]'],
       },
     },
   };

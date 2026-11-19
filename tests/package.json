@@ -1,0 +1,7 @@
+{
+  "name": "filla-tests",
+  "private": true,
+  "description": "Drives the autofill engine against mock ATS forms",
+  "scripts": { "test": "node engine.test.js" },
+  "devDependencies": { "jsdom": "^24.0.0" }
+}

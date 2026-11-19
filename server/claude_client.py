@@ -187,5 +187,42 @@ def repair(prompt: str, cfg: dict, log_dir=None, cancel_id=None, model=None) -> 
     return parse_tex_only(run_claude(prompt, cfg, (log_dir, "repair") if log_dir else None, cancel_id, model))
 
 
+def parse_json_object(text: str) -> dict:
+    """The first balanced JSON object in text, tolerant of stray fences."""
+    start = text.find("{")
+    while start != -1:
+        depth, in_str, esc = 0, False, False
+        for i in range(start, len(text)):
+            c = text[i]
+            if esc:
+                esc = False
+                continue
+            if c == "\\":
+                esc = True
+                continue
+            if in_str:
+                if c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i + 1])
+                    except json.JSONDecodeError:
+                        break
+        start = text.find("{", start + 1)
+    raise ClaudeError(f"Claude's answer held no JSON object. Started with: {text[:300]}")
+
+
+def answer(prompt: str, cfg: dict, log_dir=None, model=None) -> dict:
+    return parse_json_object(run_claude(prompt, cfg, (log_dir, "answer") if log_dir else None,
+                                        None, model))
+
+
 def refine(prompt: str, cfg: dict, log_dir=None, cancel_id=None, model=None) -> dict:
     return parse_delimited(run_claude(prompt, cfg, (log_dir, "refine") if log_dir else None, cancel_id, model))

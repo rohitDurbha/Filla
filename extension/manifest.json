@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Filla",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Tailors your resume with your own Claude for each job, then autofills the application.",
   "permissions": [
     "storage",

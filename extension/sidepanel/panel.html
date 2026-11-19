@@ -8,7 +8,7 @@
   <header>
     <div class="brand">
       <span class="logo">Filla<span class="logo-dot"></span></span>
-      <span class="ver">v0.5</span>
+      <span class="ver">v0.7</span>
     </div>
     <span id="server-dot" title="Checking the local server"><span class="dot"></span><span id="server-label">server</span></span>
   </header>
@@ -16,6 +16,7 @@
   <div id="limits" class="limits hidden" title="Your Claude plan usage">
     <div class="lim"><span class="lk">5h</span><div class="lbar"><i id="lim5"></i></div><em id="lim5t"></em></div>
     <div class="lim"><span class="lk">7d</span><div class="lbar"><i id="lim7"></i></div><em id="lim7t"></em></div>
+    <div id="lim-msg" class="lim-msg hidden"></div>
   </div>
 
   <nav class="stages" aria-label="Application progress">
@@ -33,6 +34,8 @@
     Filla is not set up yet.
     <button id="open-setup" class="linkish">Finish setup</button>
   </div>
+
+  <div id="run-context" class="runctx hidden"></div>
 
   <main>
     <!-- No supported site -->
@@ -146,7 +149,9 @@
       </div>
       <p class="muted small">Fills one page at a time and walks the page as it
       goes. On multi-step applications, click again after each step loads.</p>
+      <p id="saved-as" class="muted small hidden"></p>
       <button id="fill" class="primary">Fill this page</button>
+      <p id="fill-status" class="fill-status hidden"></p>
       <div id="fill-summary" class="hidden">
         <div id="fill-ok" class="oklist"></div>
         <div id="fill-check" class="checklist"></div>

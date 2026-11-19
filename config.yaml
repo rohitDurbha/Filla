@@ -50,3 +50,13 @@ pdf_filename: Rohit_Durbha_Resume.pdf
 
 # Where tailored runs (tex, pdf, fields json) are stored.
 output_dir: runs
+
+# The answer brain fills application questions Filla cannot map with
+# certainty, choosing only from the options each form shows. Haiku keeps
+# it fast and light on your plan. Style applies to written answers.
+answers:
+  model: haiku
+  style: >-
+    Warm, grounded, specific prose in the first person. No em dashes,
+    colons, or semicolons. No contractions. Every sentence at least eight
+    words long. Never copy sentences from the job description.

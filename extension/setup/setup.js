@@ -211,20 +211,16 @@ function validate(n) {
 
 // ---------- finish ----------
 
-const EEO_KEYS = ["gender", "hispanic_latino", "race", "veteran",
-                  "disability", "work_authorized", "requires_sponsorship"];
+const profileForm = $("profile-form");
+renderProfileForm(profileForm);
+loadProfileInto(profileForm);
 
 $("finish").addEventListener("click", async () => {
   const btn = $("finish");
   btn.disabled = true;
   btn.textContent = "Setting up…";
   try {
-    const eeoProfile = {};
-    for (const k of EEO_KEYS) {
-      const v = $(k).value;
-      if (v) eeoProfile[k] = v;
-    }
-    await chrome.storage.local.set({ eeoProfile });
+    await saveProfileFrom(profileForm);
 
     const tracks = [...document.querySelectorAll(".trackcard")].map((c) => ({
       name: c.querySelector(".t-name").value.trim(),
@@ -251,10 +247,4 @@ $("finish").addEventListener("click", async () => {
   }
   btn.disabled = false;
   btn.textContent = "Start Filla";
-});
-
-// restore any existing eeo answers for re-runs of the wizard
-chrome.storage.local.get("eeoProfile").then(({ eeoProfile }) => {
-  if (!eeoProfile) return;
-  for (const k of EEO_KEYS) if (eeoProfile[k]) $(k).value = eeoProfile[k];
 });

@@ -1,29 +1,17 @@
-const KEYS = [
-  "gender", "hispanic_latino", "race", "veteran",
-  "disability", "work_authorized", "requires_sponsorship",
-];
+// Profile page: personal answers, EEO answers, and resume tracks.
 
-async function load() {
-  const { eeoProfile } = await chrome.storage.local.get("eeoProfile");
-  if (!eeoProfile) return;
-  for (const k of KEYS) {
-    if (eeoProfile[k]) document.getElementById(k).value = eeoProfile[k];
-  }
-}
+const form = document.getElementById("profile-form");
+renderProfileForm(form);
+loadProfileInto(form);
 
 document.getElementById("save").addEventListener("click", async () => {
-  const eeoProfile = {};
-  for (const k of KEYS) {
-    const v = document.getElementById(k).value;
-    if (v) eeoProfile[k] = v;
-  }
-  await chrome.storage.local.set({ eeoProfile });
+  await saveProfileFrom(form);
+  // Cached form answers were derived from the old profile.
+  fetch("http://localhost:8765/answers/forget", { method: "POST" }).catch(() => {});
   const saved = document.getElementById("saved");
   saved.classList.add("on");
   setTimeout(() => saved.classList.remove("on"), 2200);
 });
-
-load();
 
 // ---------- resume tracks (post-setup additions) ----------
 

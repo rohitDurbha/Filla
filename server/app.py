@@ -12,6 +12,7 @@ Run:  uvicorn app:app --host 127.0.0.1 --port 8765
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -25,6 +26,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 import claude_client
+import claude_usage
 import db as dbmod
 import extract
 import github
@@ -141,6 +143,8 @@ def _compile(app_id: str, tex: str, fields: dict, notes: str,
     tex_path = d / "resume.tex"
     tex_path.write_text(tex)
     (d / "fields.json").write_text(json.dumps(fields, indent=2))
+    if notes:
+        (d / "notes.txt").write_text(notes)
     try:
         latex.compile_tex(tex_path, d)
         _clear_previews(d)
@@ -197,75 +201,10 @@ class SetupRequest(BaseModel):
     rules: str
 
 
-_limits_cache: dict = {"ts": 0.0, "data": None}
-
-
 @app.get("/limits")
 def limits():
-    """Best-effort Claude subscription usage, read the same way Claude Code
-    reads it: the OAuth token from ~/.claude/.credentials.json against the
-    usage endpoint. Unofficial, so any failure just reports unavailable and
-    the panel hides the bars."""
-    import os
-    import time as _time
-    import urllib.request
-
-    if _time.time() - _limits_cache["ts"] < 60 and _limits_cache["data"]:
-        return _limits_cache["data"]
-
-    def unavailable():
-        return {"available": False}
-
-    try:
-        cfg_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
-        creds = json.loads((cfg_dir / ".credentials.json").read_text())
-        token = creds["claudeAiOauth"]["accessToken"]
-        req = urllib.request.Request(
-            "https://api.anthropic.com/api/oauth/usage",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "anthropic-beta": "oauth-2025-04-20",
-                "User-Agent": "filla",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:
-            raw = json.load(r)
-
-        def window(node):
-            if not isinstance(node, dict):
-                return None
-            pct = node.get("utilization", node.get("used_percentage"))
-            if pct is None:
-                return None
-            pct = float(pct)
-            if pct <= 1:
-                pct *= 100
-            resets = node.get("resets_at")
-            if isinstance(resets, (int, float)):
-                from datetime import datetime, timezone
-                resets = datetime.fromtimestamp(resets, timezone.utc).isoformat()
-            return {"pct": round(pct, 1), "resets_at": resets}
-
-        def find(node, key, depth=0):
-            if not isinstance(node, dict) or depth > 4:
-                return None
-            if key in node:
-                return node[key]
-            for v in node.values():
-                hit = find(v, key, depth + 1)
-                if hit is not None:
-                    return hit
-            return None
-
-        five = window(find(raw, "five_hour"))
-        seven = window(find(raw, "seven_day"))
-        if not five and not seven:
-            return unavailable()
-        data = {"available": True, "five_hour": five, "seven_day": seven}
-        _limits_cache.update(ts=_time.time(), data=data)
-        return data
-    except Exception:
-        return unavailable()
+    """Claude plan usage for the panel's bars. See claude_usage.py."""
+    return claude_usage.get_usage()
 
 
 class TrackAddRequest(BaseModel):
@@ -359,20 +298,44 @@ def tailor(req: TailorRequest):
     app_id = uuid.uuid4().hex[:12]
     run_dir = RUNS / app_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    ticket = req.cancel_id or None
+    if ticket:
+        _tickets[ticket] = {"status": "running", "app_id": app_id}
 
     try:
         result = claude_client.tailor(prompt, CFG, log_dir=run_dir,
-                                      cancel_id=req.cancel_id or None,
+                                      cancel_id=ticket,
                                       model=req.model or None)
+        out = _compile(app_id, result["tex"], result["fields"], result["notes"])
     except claude_client.ClaudeCancelled:
+        if ticket:
+            _tickets[ticket] = {"status": "cancelled"}
         raise HTTPException(409, "Cancelled.")
     except claude_client.ClaudeError as e:
+        if ticket:
+            _tickets[ticket] = {"status": "error", "detail": str(e)}
         raise HTTPException(502, str(e))
+    except HTTPException as e:
+        if ticket:
+            _tickets[ticket] = {"status": "error", "detail": str(e.detail)}
+        raise
 
-    out = _compile(app_id, result["tex"], result["fields"], result["notes"])
     dbmod.log_application(DB_PATH, app_id, req.job.model_dump(), req.track,
                           RUNS / app_id / "resume.pdf")
+    if ticket:
+        _tickets[ticket] = {"status": "done", "result": out}
     return out
+
+
+# A tailor outlives the page that started it: clicking Apply on Workday
+# reloads the panel mid-request. The panel keeps its ticket (the cancel id)
+# and asks here for the result once it comes back.
+_tickets: dict[str, dict] = {}
+
+
+@app.get("/ticket/{ticket}")
+def ticket_status(ticket: str):
+    return _tickets.get(ticket, {"status": "unknown"})
 
 
 @app.post("/revise")
@@ -393,17 +356,53 @@ def revise(req: ReviseRequest):
     return _compile(req.app_id, result["tex"], result["fields"], result["notes"])
 
 
+_hash_cache: dict[str, tuple[float, str]] = {}
+
+
+def _find_run_by_hash(digest: str) -> str | None:
+    """The run whose resume.pdf has this sha256, newest first."""
+    runs = sorted(
+        (p for p in RUNS.glob("*/resume.pdf") if (p.parent / "fields.json").exists()),
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    for p in runs:
+        mtime = p.stat().st_mtime
+        cached = _hash_cache.get(str(p))
+        if not cached or cached[0] != mtime:
+            cached = (mtime, hashlib.sha256(p.read_bytes()).hexdigest())
+            _hash_cache[str(p)] = cached
+        if cached[1] == digest:
+            return p.parent.name
+    return None
+
+
 @app.post("/upload")
 async def upload(resume: UploadFile = File(...), title: str = Form(""),
                  company: str = Form(""), url: str = Form(""), ats: str = Form("")):
-    """Own-PDF path: the user already has a tailored PDF, no Claude involved."""
+    """Own-PDF path: the user already has a tailored PDF, no Claude involved.
+    A PDF that Filla itself built is recognized by its hash and reopens its
+    original run, exact fields and LaTeX included, so nothing is re-parsed."""
     if not (resume.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "Please upload a PDF file.")
+    data = await resume.read()
+    known = _find_run_by_hash(hashlib.sha256(data).hexdigest())
+    if known:
+        kd = RUNS / known
+        has_tex = (kd / "resume.tex").exists()
+        notes_path = kd / "notes.txt"
+        return {
+            "app_id": known,
+            "fields": json.loads((kd / "fields.json").read_text()),
+            "pdf_url": f"/pdf/{known}",
+            "source": "claude" if has_tex else "pdf",
+            "notes": notes_path.read_text() if notes_path.exists() else "",
+            "recognized": True,
+        }
     app_id = uuid.uuid4().hex[:12]
     d = RUNS / app_id
     d.mkdir(parents=True, exist_ok=True)
     pdf_path = d / "resume.pdf"
-    pdf_path.write_bytes(await resume.read())
+    pdf_path.write_bytes(data)
     try:
         fields = extract.extract_fields(pdf_path)
     except Exception:
@@ -451,6 +450,120 @@ def refine(req: RefineRequest):
     except claude_client.ClaudeError as e:
         raise HTTPException(502, str(e))
     return _compile(req.app_id, result["tex"], result["fields"], result["notes"])
+
+
+ANSWER_PROMPT = (SERVER / "prompts" / "answer.md").read_text()
+DEFAULT_ANSWER_STYLE = (
+    "Warm, grounded, specific prose in the first person. No em dashes, "
+    "colons, or semicolons. No contractions. Every sentence at least eight "
+    "words long. Never copy sentences from the job description."
+)
+
+
+class AnswerQuestion(BaseModel):
+    id: str
+    question: str
+    kind: str = "text"          # choice | multi | text
+    options: list[str] = []
+    required: bool = False
+
+
+class AnswerRequest(BaseModel):
+    app_id: str = ""
+    questions: list[AnswerQuestion]
+    profile: dict = {}
+    job: dict = {}
+
+
+def _answer_key(q: AnswerQuestion) -> str:
+    norm = lambda s: re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+    raw = q.kind + "|" + norm(q.question) + "|" + "|".join(sorted(norm(o) for o in q.options))
+    return hashlib.sha1(raw.encode()).hexdigest()
+
+
+def _cacheable(q: AnswerQuestion, value, company: str) -> bool:
+    """Choice answers about the candidate generalize across applications.
+    Anything naming this company, and any free-text writing, does not."""
+    if value is None:
+        return False
+    if company and company.lower() in q.question.lower():
+        return False
+    if q.kind == "text":
+        return isinstance(value, str) and len(value) <= 60 and "\n" not in value
+    return True
+
+
+def _valid_answer(q: AnswerQuestion, value):
+    """Enforce rule one in code too: a choice must be one of the options."""
+    if value is None:
+        return None
+    if q.kind == "choice":
+        if not isinstance(value, str):
+            return None
+        for o in q.options:
+            if o.strip().lower() == value.strip().lower():
+                return o
+        return None
+    if q.kind == "multi":
+        vals = value if isinstance(value, list) else [value]
+        picked = [o for o in q.options
+                  if any(isinstance(v, str) and o.strip().lower() == v.strip().lower() for v in vals)]
+        return picked or None
+    return value if isinstance(value, str) and value.strip() else None
+
+
+@app.post("/answer")
+def answer(req: AnswerRequest):
+    """The answer brain for questions the extension could not map with
+    certainty. Choice answers are cached, so each distinct question costs
+    one Claude call ever."""
+    company = (req.job or {}).get("company", "")
+    answers, cached, pending = {}, [], []
+    for q in req.questions[:40]:
+        hit = dbmod.get_answer(DB_PATH, _answer_key(q))
+        if hit is not None and _valid_answer(q, hit) is not None:
+            answers[q.id] = _valid_answer(q, hit)
+            cached.append(q.id)
+        else:
+            pending.append(q)
+
+    if pending:
+        resume = {}
+        run_dir = RUNS / req.app_id if req.app_id else None
+        if run_dir and (run_dir / "fields.json").exists():
+            resume = json.loads((run_dir / "fields.json").read_text())
+        acfg = CFG.get("answers") or {}
+        prompt = ANSWER_PROMPT.format(
+            style=acfg.get("style") or DEFAULT_ANSWER_STYLE,
+            profile=json.dumps(req.profile, indent=1)[:6000],
+            resume=json.dumps(resume, indent=1)[:12000],
+            company=company or "(unknown)",
+            title=(req.job or {}).get("title") or "(unknown)",
+            questions=json.dumps(
+                [{"id": q.id, "question": q.question[:600], "kind": q.kind,
+                  "options": q.options[:60]} for q in pending], indent=1),
+        )
+        try:
+            out = claude_client.answer(prompt, CFG, log_dir=run_dir if run_dir and run_dir.exists() else None,
+                                       model=acfg.get("model", "haiku"))
+        except claude_client.ClaudeError as e:
+            raise HTTPException(502, str(e))
+        raw = out.get("answers", {}) if isinstance(out, dict) else {}
+        for q in pending:
+            v = _valid_answer(q, raw.get(q.id))
+            if v is None:
+                continue
+            answers[q.id] = v
+            if _cacheable(q, v, company):
+                dbmod.put_answer(DB_PATH, _answer_key(q), q.question, v)
+
+    return {"answers": answers, "cached": cached}
+
+
+@app.post("/answers/forget")
+def forget_answers():
+    """Clear the answer cache, for when the profile changes."""
+    return {"cleared": dbmod.forget_answers(DB_PATH)}
 
 
 @app.get("/tex/{app_id}")
@@ -541,14 +654,22 @@ def preview_page(app_id: str, page: int):
     return FileResponse(png, media_type="image/png")
 
 
+def download_name(company: str = "") -> str:
+    """Rohit_Durbha_Resume_Method_Financial.pdf: the configured base name
+    with the company appended, so every download and upload is distinct."""
+    base = re.sub(r"\.pdf$", "", CFG.get("pdf_filename", "resume.pdf"), flags=re.I)
+    co = re.sub(r"[^A-Za-z0-9]+", "_", company or "").strip("_")
+    return f"{base}_{co}.pdf" if co else f"{base}.pdf"
+
+
 @app.get("/pdf/{app_id}")
-def pdf(app_id: str):
+def pdf(app_id: str, company: str = ""):
     d = _run_dir(app_id)
     pdf_path = d / "resume.pdf"
     if not pdf_path.exists():
         raise HTTPException(404, "PDF not built yet")
     return FileResponse(pdf_path, media_type="application/pdf",
-                        filename=CFG.get("pdf_filename", "resume.pdf"))
+                        filename=download_name(company))
 
 
 @app.get("/fields/{app_id}")

@@ -28,14 +28,33 @@ no API key exists anywhere in this project.
   on it to jump to that exact place in the LaTeX source, edit, and
   recompile. Compile errors go back to Claude for one automatic repair
   pass first.
-- **Verified autofill that walks the page.** Filling scrolls to each
-  field, flashes it, and streams a live feed. A checkmark means the value
-  verifiably landed. Anything uncertain goes to a double-check list, so
-  the feed never lies. Standard and custom EEO questions fill from a
-  one-time profile stored only in your browser.
-- **Bring a PDF instead.** Already have a tailored resume? Drop it on the
-  panel and Filla extracts your details locally, no AI involved, and
-  fills with that.
+- **Autofill that understands the form.** Filling works in two layers.
+  Widget drivers in code operate every kind of control (native selects,
+  hidden radio groups, Workday listboxes, searchable dropdowns, text
+  boxes) and verify each action before reporting it. Answers come from
+  your profile first, matched by what the question means. Whatever is
+  left goes to Claude Haiku in one batch per page along with the exact
+  options on screen, and the server rejects any answer that is not one
+  of those options. Choice answers are cached, so a question costs one
+  Claude call ever. Drafted written answers always land in the
+  double-check list.
+- **Walks the page as it fills.** Filling scrolls to each field, flashes
+  it, and streams a live feed. A checkmark means the value verifiably
+  landed, so the feed never claims what did not happen.
+- **One application, many pages.** The active application survives every
+  page load, so creating a Workday account, verifying it, and signing in
+  never lose your tailored resume. Clicking Apply while Claude is still
+  tailoring is fine too. The server finishes the work and the panel
+  picks it back up.
+- **Recognizes its own resumes.** Drop a PDF that Filla tailored earlier
+  and it reopens that exact run, fields and LaTeX included, with nothing
+  re-parsed.
+- **Bring a PDF instead.** Already have a tailored resume from somewhere
+  else? Drop it on the panel and Filla extracts your details locally, no
+  AI involved, and fills with that.
+- **Company-named files.** Every tailored resume downloads and uploads as
+  Your_Name_Resume_Company.pdf, so recruiters and your Downloads folder
+  never see the same filename twice.
 - **Model choice and plan visibility.** Pick Sonnet, Opus, or Haiku per
   tailoring run, and see your Claude plan's 5-hour and 7-day usage bars
   with reset times at the top of the panel.
@@ -49,13 +68,13 @@ no API key exists anywhere in this project.
 
 ## Supported job sites
 
-Greenhouse, Lever, Ashby, and SmartRecruiters are the primary surfaces,
-including their application-form pages. Workday is supported as a newer
-surface. Basics, resume upload, and the voluntary-disclosure dropdowns
-fill through Workday's stable automation ids, and its multi-step flow
-works with one Fill per page, though its stranger widgets land in the
-double-check list by design. Expect to confirm more by hand there while
-this surface matures.
+Greenhouse, Lever, Ashby, SmartRecruiters, and Workday, including their
+application-form pages. On Workday, Filla reads the posting from
+Workday's own JSON endpoint, which works on every step of the apply
+flow, fills legal name and full address from your profile over whatever
+Workday's resume parser guessed, answers its listbox questions, and fills
+empty work experience entries from your resume. Click Fill once per
+Workday page.
 
 ## Getting started
 
@@ -91,7 +110,10 @@ step. Mark applied moves the job into your Submitted history.
 ## Adding things later
 
 The Profile page (footer link) holds your one-time application answers
-and lets you add new resume tracks any time without rerunning setup.
+(legal and preferred name, full street address, phone type, how you
+heard about jobs, relocation, salary, start date, and EEO answers) and
+lets you add new resume tracks any time without rerunning setup.
+Saving the profile clears cached form answers so nothing stale lingers.
 `config.yaml` at the repo root holds the model default, timeouts, GitHub
 settings, and the PDF filename recruiters see. Every tailoring run keeps
 an audit trail under `server/runs/` with the exact prompt and response.
@@ -113,6 +135,14 @@ same data Claude Code itself reads, through an unofficial endpoint, so
 if they ever stop appearing the feature has hidden itself harmlessly.
 At heavy volume, the per-run model picker helps. Haiku is a fine
 tailor for routine postings and spends far less of the window.
+
+## Tests
+
+`cd tests && npm install && npm test` drives the autofill engine against
+mock forms built the way each ATS builds its widgets: Workday listboxes
+and experience entries, SmartRecruiters dropdowns with a photo input
+before the resume box, Ashby hidden radios, and the references box that
+must never receive a name.
 
 ## Privacy
 

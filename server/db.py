@@ -7,6 +7,7 @@ Opening a connection is cheap at this scale.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,6 +24,12 @@ CREATE TABLE IF NOT EXISTS applications (
     status TEXT DEFAULT 'tailored',
     pdf_path TEXT
 );
+CREATE TABLE IF NOT EXISTS answers (
+    key TEXT PRIMARY KEY,
+    question TEXT,
+    value TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -31,7 +38,7 @@ def _conn(db_path: Path):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(SCHEMA)
+        conn.executescript(SCHEMA)
         yield conn
         conn.commit()
     finally:
@@ -72,3 +79,22 @@ def list_applications(db_path: Path, limit=200):
             "SELECT * FROM applications ORDER BY created_at DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_answer(db_path: Path, key: str):
+    with _conn(db_path) as conn:
+        row = conn.execute("SELECT value FROM answers WHERE key = ?", (key,)).fetchone()
+        return json.loads(row["value"]) if row else None
+
+
+def put_answer(db_path: Path, key: str, question: str, value) -> None:
+    with _conn(db_path) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO answers (key, question, value) VALUES (?, ?, ?)",
+            (key, question, json.dumps(value)),
+        )
+
+
+def forget_answers(db_path: Path) -> int:
+    with _conn(db_path) as conn:
+        return conn.execute("DELETE FROM answers").rowcount

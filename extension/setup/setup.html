@@ -45,6 +45,8 @@
       background: var(--card); border: 1px solid var(--line); border-radius: 14px;
       padding: 20px 22px; margin-bottom: 14px; box-shadow: var(--shadow);
     }
+    .card h2 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
+    .card > p { color: var(--muted); font-size: 12.5px; margin: 0 0 6px; }
     .check { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
     .check .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
     .check.ok .dot { background: var(--ok); }
@@ -198,53 +200,11 @@
     <!-- Step 4: application answers -->
     <section class="step hidden" data-step="4">
       <h1>One-time application answers</h1>
-      <p class="lead">US applications ask these on nearly every form and they
-      never appear on a resume. Answered once, filled everywhere. Stored only
-      in your browser. Picking Skip leaves the question untouched.</p>
-      <div class="card">
-        <label>Gender
-          <select id="gender"><option value="">Skip this question</option>
-            <option value="male">Male</option><option value="female">Female</option>
-            <option value="nonbinary">Non-binary</option>
-            <option value="decline">Decline to self-identify</option></select>
-        </label>
-        <label>Are you Hispanic or Latino?
-          <select id="hispanic_latino"><option value="">Skip this question</option>
-            <option value="yes">Yes</option><option value="no">No</option>
-            <option value="decline">Decline to self-identify</option></select>
-        </label>
-        <label>Race
-          <select id="race"><option value="">Skip this question</option>
-            <option value="american_indian">American Indian or Alaska Native</option>
-            <option value="asian">Asian</option>
-            <option value="black">Black or African American</option>
-            <option value="hispanic">Hispanic or Latino</option>
-            <option value="pacific_islander">Native Hawaiian or Other Pacific Islander</option>
-            <option value="white">White</option>
-            <option value="two_or_more">Two or More Races</option>
-            <option value="decline">Decline to self-identify</option></select>
-        </label>
-        <label>Protected veteran status
-          <select id="veteran"><option value="">Skip this question</option>
-            <option value="not_protected">I am not a protected veteran</option>
-            <option value="protected">I identify as one or more classes of protected veteran</option>
-            <option value="decline">I do not wish to answer</option></select>
-        </label>
-        <label>Disability status
-          <select id="disability"><option value="">Skip this question</option>
-            <option value="yes">Yes, I have a disability (or previously had one)</option>
-            <option value="no">No, I do not have a disability</option>
-            <option value="decline">I do not want to answer</option></select>
-        </label>
-        <label>Are you legally authorized to work in the United States?
-          <select id="work_authorized"><option value="">Skip this question</option>
-            <option value="yes">Yes</option><option value="no">No</option></select>
-        </label>
-        <label>Will you now or in the future require sponsorship?
-          <select id="requires_sponsorship"><option value="">Skip this question</option>
-            <option value="yes">Yes</option><option value="no">No</option></select>
-        </label>
-      </div>
+      <p class="lead">Applications ask plenty that never appears on a resume,
+      from your legal name and street address to work eligibility. Answered
+      once, filled everywhere, stored only in your browser. Picking Skip
+      leaves that question untouched.</p>
+      <div id="profile-form"></div>
       <div class="nav">
         <button class="ghost" data-back>Back</button>
         <button class="primary" id="finish">Start Filla</button>
@@ -262,6 +222,7 @@
       lives at <a href="http://localhost:8765/tracker" target="_blank">localhost:8765/tracker</a>.</p>
     </section>
   </div>
+  <script src="../common/profile.js"></script>
   <script src="setup.js"></script>
 </body>
 </html>

@@ -14,6 +14,7 @@ const state = {
   dirty: false,
   source: null,   // "claude" | "pdf"
   score: null,    // {from, to}, kept across refinements
+  notes: "",
   zoom: 1,
   cancelId: null,
   busyReturn: "job",
@@ -34,11 +35,107 @@ function setStage(n) {
 
 let currentView = "nosite";
 
+const RUN_VIEWS = ["review", "pdf", "fill"];
+
 function show(view) {
   currentView = view;
   for (const v of views) $("view-" + v).classList.toggle("hidden", v !== view);
   setStage(VIEW_STAGE[view]);
   hideError();
+  const ctx = $("run-context");
+  if (state.appId && RUN_VIEWS.includes(view) && state.job) {
+    ctx.innerHTML = "";
+    ctx.append("Applying to ");
+    const t = document.createElement("b");
+    t.textContent = state.job.title || "this role";
+    ctx.append(t, " at ");
+    const c = document.createElement("b");
+    c.textContent = state.job.company || "this company";
+    ctx.append(c);
+    ctx.classList.remove("hidden");
+  } else {
+    ctx.classList.add("hidden");
+  }
+  if (state.appId && RUN_VIEWS.includes(view)) saveRun();
+}
+
+// ---------- the active application survives page loads ----------
+// The panel reloads with every navigation (account creation, sign in,
+// each step of a multi-page form), so the run lives in extension storage.
+
+const RUN_KEY = "fillaActiveRun";
+const RUN_TTL = 3 * 24 * 3600 * 1000;
+
+function saveRun() {
+  chrome.storage.local.set({ [RUN_KEY]: {
+    appId: state.appId, fields: state.fields, source: state.source,
+    score: state.score, notes: state.notes, job: state.job,
+    view: RUN_VIEWS.includes(currentView) ? currentView : "review",
+    savedAt: Date.now(),
+  } });
+}
+
+function clearRun() { chrome.storage.local.remove(RUN_KEY); }
+
+const PENDING_KEY = "fillaPendingTailor";
+
+// If the page navigated while Claude was tailoring, the server finished the
+// work anyway. Pick the result up by ticket instead of starting over.
+async function resumePendingTailor() {
+  const { [PENDING_KEY]: p } = await chrome.storage.local.get(PENDING_KEY);
+  if (!p || Date.now() - p.startedAt > 20 * 60 * 1000) return false;
+  state.job = p.job;
+  state.source = "claude";
+  state.cancelId = p.ticket;
+  state.busyReturn = "job";
+  busyCtl = new AbortController();
+  $("busy-text").textContent =
+    `Still tailoring your resume for ${p.job?.company || "this job"}. It kept going while the page changed.`;
+  show("busy");
+  for (;;) {
+    if (busyCtl.signal.aborted) return true;
+    let t;
+    try { t = await api(`/ticket/${p.ticket}`); } catch { t = { status: "unknown" }; }
+    if (t.status === "done") {
+      chrome.storage.local.remove(PENDING_KEY);
+      loadLimits();
+      enterReview(t.result);
+      return true;
+    }
+    if (t.status !== "running") {
+      chrome.storage.local.remove(PENDING_KEY);
+      if (t.status === "error") fail(t.detail || "Tailoring failed.");
+      return false;
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+}
+
+const normCo = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ""; } };
+
+// Restore when the current page belongs to the same employer: same Workday
+// tenant host, or the same company name on shared hosts like Ashby.
+async function restoreRun(currentJob) {
+  const { [RUN_KEY]: r } = await chrome.storage.local.get(RUN_KEY);
+  if (!r || !r.appId || Date.now() - r.savedAt > RUN_TTL) return false;
+  const tab = await getTab();
+  const host = hostOf(tab?.url);
+  const savedHost = hostOf(r.job?.url);
+  const sameCompany = currentJob?.company && normCo(currentJob.company) === normCo(r.job?.company);
+  const sameTenant = host && host === savedHost && !/^(jobs\.ashbyhq\.com|jobs\.lever\.co|boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.smartrecruiters\.com)$/.test(host);
+  const noJobHere = !currentJob?.supported || !currentJob?.title;
+  if (!(sameCompany || sameTenant || (noJobHere && host === savedHost))) return false;
+
+  Object.assign(state, {
+    appId: r.appId, fields: r.fields, source: r.source,
+    score: r.score, notes: r.notes || "", job: r.job,
+  });
+  $("stage-resume-label").textContent = r.source === "pdf" ? "PDF" : "Resume";
+  if (r.view === "review") enterReview({ app_id: r.appId, fields: r.fields, notes: r.notes });
+  else if (r.view === "pdf") enterPdfView();
+  else enterFill();
+  return true;
 }
 
 function fail(msg) {
@@ -72,7 +169,7 @@ async function getTab() {
 }
 
 const CONTENT_FILES = ["content/adapters.js", "content/autofill.js", "content/detector.js"];
-const CONTENT_VERSION = 5;
+const CONTENT_VERSION = 6;
 
 // Self-heal: after an extension reload, pages keep orphaned or outdated
 // content scripts. On a dead connection or an old version, inject the
@@ -108,6 +205,7 @@ function startBusy(returnView, text) {
 
 $("busy-cancel").addEventListener("click", () => {
   busyCtl?.abort();
+  chrome.storage.local.remove(PENDING_KEY);
   const id = state.cancelId;
   if (id) fetch(SERVER + "/cancel", {
     method: "POST",
@@ -132,7 +230,19 @@ function fmtReset(iso) {
 async function loadLimits() {
   try {
     const l = await api("/limits");
-    if (!l.available) return $("limits").classList.add("hidden");
+    const box = $("limits");
+    const msg = $("lim-msg");
+    const rows = box.querySelectorAll(".lim");
+    if (!l.available) {
+      rows.forEach((r) => r.classList.add("hidden"));
+      msg.textContent = "Plan usage unavailable. " + (l.reason || "");
+      msg.classList.remove("hidden");
+      box.classList.remove("hidden");
+      return;
+    }
+    rows.forEach((r) => r.classList.remove("hidden"));
+    msg.classList.add("hidden");
+    box.classList.toggle("stale", !!l.stale);
     const put = (w, barId, txtId) => {
       const bar = $(barId), txt = $(txtId);
       if (!w) { bar.style.width = "0%"; txt.textContent = ""; return; }
@@ -190,9 +300,11 @@ function suggestTrack(job) {
   return { track: best, confident: bestScore > 1 };
 }
 
-async function detectJob() {
+async function detectJob(allowRestore = false) {
   try {
-    const job = await sendToTab({ action: "get_job" });
+    const job = await sendToTab({ action: "get_job" }).catch(() => null);
+    if (allowRestore && await resumePendingTailor()) return;
+    if (allowRestore && await restoreRun(job)) return;
     if (!job?.supported) return show("nosite");
     state.job = job;
     $("job-title").textContent = job.title || "(title not detected)";
@@ -212,7 +324,8 @@ async function detectJob() {
 
 function resetFlow() {
   state.appId = null; state.fields = null; state.source = null;
-  state.dirty = false; state.zoom = 1; state.score = null;
+  state.dirty = false; state.zoom = 1; state.score = null; state.notes = "";
+  clearRun();
   $("stage-resume-label").textContent = "Resume";
   detectJob();
 }
@@ -225,6 +338,8 @@ $("apply").addEventListener("click", async () => {
   $("stage-resume-label").textContent = "Resume";
   const signal = startBusy("job",
     "Claude is reading the posting and tailoring your resume. This usually takes a minute.");
+  chrome.storage.local.set({ [PENDING_KEY]: {
+    ticket: state.cancelId, job: state.job, startedAt: Date.now() } });
   try {
     const out = await api("/tailor", {
       job: {
@@ -236,6 +351,7 @@ $("apply").addEventListener("click", async () => {
       cancel_id: state.cancelId,
       model: $("model").value,
     }, signal);
+    chrome.storage.local.remove(PENDING_KEY);
     loadLimits();
     if (document.hidden) {
       try {
@@ -250,6 +366,7 @@ $("apply").addEventListener("click", async () => {
     enterReview(out);
   } catch (e) {
     if (e.name === "AbortError") return;
+    chrome.storage.local.remove(PENDING_KEY);
     show("job"); fail(e);
   }
 });
@@ -296,7 +413,17 @@ async function handlePdf(file) {
       try { detail = (await resp.json()).detail || detail; } catch {}
       throw new Error(detail);
     }
-    enterReview(await resp.json());
+    const out = await resp.json();
+    if (out.recognized) {
+      // A resume Filla built earlier: reopen its run, exact fields intact.
+      state.source = out.source;
+      $("stage-resume-label").textContent = out.source === "pdf" ? "PDF" : "Resume";
+    }
+    enterReview(out);
+    if (out.recognized) {
+      $("review-note").textContent =
+        "Recognized this as a resume Filla tailored, so these are its exact fields with nothing re-parsed.";
+    }
   } catch (e) {
     if (e.name === "AbortError") return;
     show("job"); fail(e);
@@ -332,6 +459,7 @@ function enterReview(out) {
 }
 
 function renderNotes(text) {
+  state.notes = text;
   const scoreBox = $("notes-score");
   const list = $("claude-notes-list");
   scoreBox.innerHTML = "";
@@ -620,21 +748,55 @@ $("tex-recompile").addEventListener("click", async () => {
 
 $("pdf-back").addEventListener("click", () => { renderEditor(state.fields); show("review"); });
 
-$("pdf-approve").addEventListener("click", async () => {
-  if (state.source === "claude") {
-    try {
-      await chrome.downloads.download({
-        url: `${SERVER}/pdf/${state.appId}`,
-        filename: state.pdfFilename,
-        conflictAction: "uniquify",
-      });
-    } catch (e) { fail(e); }
+// Rohit_Durbha_Resume_Method_Financial.pdf, mirroring the server's name.
+function downloadName() {
+  const base = (state.pdfFilename || "resume.pdf").replace(/\.pdf$/i, "");
+  const co = (state.job?.company || "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return co ? `${base}_${co}.pdf` : `${base}.pdf`;
+}
+
+// The PDF comes down as bytes and is saved from a blob URL. Handing
+// chrome.downloads the localhost URL from inside a page-embedded panel
+// was not producing PDFs reliably, a blob sidesteps the network entirely.
+async function downloadPdf() {
+  const resp = await fetch(`${SERVER}/pdf/${state.appId}`);
+  if (!resp.ok) throw new Error("Could not load the resume PDF from the server.");
+  const blob = new Blob([await resp.arrayBuffer()], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const name = downloadName();
+  try {
+    await chrome.downloads.download({ url, filename: name, conflictAction: "uniquify", saveAs: false });
+  } catch {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return name;
+}
+
+function enterFill() {
   show("fill");
   $("fill-ok").innerHTML = "";
   $("fill-check").innerHTML = "";
   $("fill-skip").innerHTML = "";
   $("fill-summary").classList.add("hidden");
+}
+
+$("pdf-approve").addEventListener("click", async () => {
+  const note = $("saved-as");
+  note.classList.add("hidden");
+  if (state.source === "claude") {
+    try {
+      const name = await downloadPdf();
+      note.textContent = `Saved to your Downloads as ${name}`;
+      note.classList.remove("hidden");
+    } catch (e) { fail(e); }
+  }
+  enterFill();
 });
 
 // ---------- autofill, with a live follow-along feed ----------
@@ -646,7 +808,11 @@ const FILL_BUCKETS = {
 };
 
 chrome.runtime.onMessage.addListener((m) => {
-  if (m?.filla !== "fill_progress" || m.status === "done" || !m.label) return;
+  if (m?.filla !== "fill_progress") return;
+  const st = $("fill-status");
+  if (m.status === "info") { st.textContent = m.label; st.classList.remove("hidden"); return; }
+  if (m.status === "done") { st.textContent = "Done with this page."; return; }
+  if (!m.label) return;
   const bucket = FILL_BUCKETS[m.status] || FILL_BUCKETS.skipped;
   const box = $(bucket.id);
   if (bucket.head && !box.querySelector(".head")) {
@@ -672,8 +838,10 @@ function blobToBase64(blob) {
 }
 
 $("fill").addEventListener("click", async () => {
-  const { eeoProfile } = await chrome.storage.local.get("eeoProfile");
+  const { eeoProfile = {}, personalProfile = {} } =
+    await chrome.storage.local.get(["eeoProfile", "personalProfile"]);
   $("fill").disabled = true;
+  $("fill-status").classList.add("hidden");
   $("fill-ok").innerHTML = "";
   $("fill-check").innerHTML = "";
   $("fill-skip").innerHTML = "";
@@ -687,9 +855,12 @@ $("fill").addEventListener("click", async () => {
       action: "fill",
       payload: {
         fields: state.fields,
-        eeo: eeoProfile || {},
+        eeo: eeoProfile,
+        personal: personalProfile,
+        appId: state.appId,
+        job: { company: state.job?.company || "", title: state.job?.title || "" },
         pdfBase64,
-        pdfFilename: state.pdfFilename,
+        pdfFilename: downloadName(),
       },
     });
     if (!res?.ok) throw new Error(res?.error || "Fill failed");
@@ -728,7 +899,7 @@ $("model").addEventListener("change", () => {
   chrome.storage.local.set({ fillaModel: $("model").value });
 });
 
-checkServer().then(detectJob);
+checkServer().then(() => detectJob(true));
 loadLimits();
 setInterval(checkServer, 30000);
 setInterval(loadLimits, 300000);

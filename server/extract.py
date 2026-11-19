@@ -223,7 +223,38 @@ def _split_project_name(title: str, repo_urls: list[str]) -> tuple[str, str]:
     for k in range(len(words), 0, -1):
         if _norm_token("".join(words[:k])) in repos:
             return " ".join(words[:k]), " ".join(words[k:]).strip(" ,|")
-    return title, ""
+    return _split_at_tech_list(title)
+
+
+# Tech names that span two words, so the split does not cut them in half.
+_TWO_WORD_TECH = {
+    "power bi", "google cloud", "spring boot", "scikit learn", "react native",
+    "web speech", "next js", "node js", "vue js", "apache spark", "aws lambda",
+    "github actions", "hugging face", "speech api", "sql server", "big query",
+}
+
+
+def _split_at_tech_list(title: str) -> tuple[str, str]:
+    """Fallback when no repo link matches. In 'San Jose Public Safety
+    Dashboard Python, SQL, Streamlit' the tech list is everything from the
+    word right before the first comma, so the name is what precedes it."""
+    title = title.strip()
+    if "," not in title:
+        # A separator like '|' sometimes divides name from tech instead.
+        if "|" in title:
+            name, _, tech = title.partition("|")
+            return name.strip(), tech.strip()
+        return title, ""
+    head, _, tail = title.partition(",")
+    words = head.split()
+    if len(words) < 2:
+        return title, ""
+    k = len(words) - 1  # index where the tech list begins
+    if len(words) >= 3 and " ".join(words[-2:]).lower().replace(".", " ").strip() in _TWO_WORD_TECH:
+        k = len(words) - 2
+    name = " ".join(words[:k]).strip(" -|")
+    tech = (" ".join(words[k:]) + "," + tail).strip(" ,|")
+    return (name, tech) if name else (title, "")
 
 
 def extract_fields(pdf_path: Path) -> dict:
