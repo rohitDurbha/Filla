@@ -212,7 +212,7 @@ $("busy-cancel").addEventListener("click", () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ cancel_id: id }),
   }).catch(() => {});
-  if (state.busyReturn === "review") renderEditor(state.fields);
+  if (state.busyReturn === "review") safeRender(state.fields);
   show(state.busyReturn || "job");
 });
 
@@ -454,7 +454,7 @@ function enterReview(out) {
   } else {
     notes.classList.add("hidden");
   }
-  renderEditor(out.fields);
+  safeRender(out.fields);
   show("review");
 }
 
@@ -514,12 +514,12 @@ $("refine-go").addEventListener("click", async () => {
     state.fields = out.fields;
     state.dirty = false;
     if (out.notes) renderNotes(out.notes);
-    renderEditor(out.fields);
+    safeRender(out.fields);
     show("review");
     $("claude-notes").open = true;
   } catch (e) {
     if (e.name === "AbortError") return;
-    renderEditor(state.fields); show("review"); fail(e);
+    safeRender(state.fields); show("review"); fail(e);
   }
 });
 
@@ -547,9 +547,23 @@ function section(title, open = false) {
   return [d, body];
 }
 
+const asList = (v) => (Array.isArray(v) ? v : typeof v === "string"
+  ? v.split(/\n|,/).map((x) => x.trim()).filter(Boolean) : []);
+
 function bulletsArea(parent, obj) {
-  parent.appendChild(inp("Bullets (one per line)", (obj.bullets || []).join("\n"),
+  parent.appendChild(inp("Bullets (one per line)", asList(obj.bullets).join("\n"),
     (v) => { obj.bullets = v.split("\n").filter(Boolean); }, true));
+}
+
+// A malformed field shape must never strand the panel on a busy screen.
+function safeRender(f) {
+  try { renderEditor(f || {}); }
+  catch (e) {
+    $("fields-editor").innerHTML = "";
+    // Deferred, since the view switch that follows clears the error box.
+    setTimeout(() => fail("Claude returned resume fields Filla could not display, so the editor is empty. " +
+      "The PDF is still updated, so continue from the Final step. " + (e.message || e)), 0);
+  }
 }
 
 function renderEditor(f) {
@@ -605,7 +619,7 @@ function renderEditor(f) {
       }],
   ];
   for (const [title, arr, head, build] of lists) {
-    if (!arr?.length) continue;
+    if (!Array.isArray(arr) || !arr.length) continue;
     const [d, body] = section(`${title} (${arr.length})`);
     arr.forEach((e) => {
       const box = document.createElement("div");
@@ -620,10 +634,11 @@ function renderEditor(f) {
     root.appendChild(d);
   }
 
-  if (f.skills?.length) {
+  if (Array.isArray(f.skills) && f.skills.length) {
     const [d, body] = section("Skills");
     f.skills.forEach((g) => {
-      body.appendChild(inp(g.category || "Skills", (g.items || []).join(", "),
+      if (!g || typeof g !== "object") return;
+      body.appendChild(inp(g.category || "Skills", asList(g.items).join(", "),
         (v) => (g.items = v.split(",").map((x) => x.trim()).filter(Boolean))));
     });
     root.appendChild(d);
@@ -644,7 +659,7 @@ $("review-approve").addEventListener("click", async () => {
       state.dirty = false;
     } catch (e) {
       if (e.name === "AbortError") return;
-      renderEditor(state.fields); show("review"); return fail(e);
+      safeRender(state.fields); show("review"); return fail(e);
     }
   }
   enterPdfView();
@@ -746,7 +761,7 @@ $("tex-recompile").addEventListener("click", async () => {
   btn.textContent = "Recompile";
 });
 
-$("pdf-back").addEventListener("click", () => { renderEditor(state.fields); show("review"); });
+$("pdf-back").addEventListener("click", () => { safeRender(state.fields); show("review"); });
 
 // Rohit_Durbha_Resume_Method_Financial.pdf, mirroring the server's name.
 function downloadName() {

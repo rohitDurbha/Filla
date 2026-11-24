@@ -29,6 +29,7 @@ import claude_client
 import claude_usage
 import db as dbmod
 import extract
+import fields_shape
 import github
 import latex
 
@@ -142,6 +143,7 @@ def _compile(app_id: str, tex: str, fields: dict, notes: str,
     d.mkdir(exist_ok=True)
     tex_path = d / "resume.tex"
     tex_path.write_text(tex)
+    fields = fields_shape.normalize(fields)
     (d / "fields.json").write_text(json.dumps(fields, indent=2))
     if notes:
         (d / "notes.txt").write_text(notes)
@@ -407,7 +409,7 @@ async def upload(resume: UploadFile = File(...), title: str = Form(""),
         fields = extract.extract_fields(pdf_path)
     except Exception:
         fields = {"personal": {}}
-    (d / "fields.json").write_text(json.dumps(fields, indent=2))
+    (d / "fields.json").write_text(json.dumps(fields_shape.normalize(fields), indent=2))
     dbmod.log_application(
         DB_PATH, app_id,
         {"title": title, "company": company, "url": url, "ats": ats},
@@ -421,7 +423,7 @@ async def upload(resume: UploadFile = File(...), title: str = Form(""),
 def save_fields(app_id: str, fields: dict):
     """Persist user edits for runs that have no LaTeX to revise (own-PDF)."""
     d = _run_dir(app_id)
-    (d / "fields.json").write_text(json.dumps(fields, indent=2))
+    (d / "fields.json").write_text(json.dumps(fields_shape.normalize(fields), indent=2))
     return {"ok": True}
 
 
@@ -436,10 +438,12 @@ def refine(req: RefineRequest):
         raise HTTPException(400, "Tell Claude what to change first.")
     rules_path = SERVER / CFG.get("rules_file", "resumes/rules.md")
     rules = rules_path.read_text() if rules_path.exists() else "(no extra rules)"
+    fields_path = d / "fields.json"
     prompt = REFINE_PROMPT.format(
         instruction=req.instruction.strip()[:4000],
         rules=rules,
         resume_tex=tex_path.read_text(),
+        fields_json=fields_path.read_text() if fields_path.exists() else "{}",
     )
     try:
         result = claude_client.refine(prompt, CFG, log_dir=d,

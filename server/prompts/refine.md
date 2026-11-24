@@ -16,6 +16,12 @@ everything else as it is, and stay within their standing rules.
 {resume_tex}
 ```
 
+## Current fields JSON (keep this exact schema)
+
+```json
+{fields_json}
+```
+
 ## Constraints
 
 - Apply the requested refinements faithfully. Where a request conflicts
@@ -33,7 +39,9 @@ Answer with ONLY the following sections, nothing before or after:
 ===TEX===
 (the complete updated .tex file, raw, no markdown fences)
 ===FIELDS===
-(the fields JSON matching the updated tex, same schema as before, no fences)
+(the fields JSON matching the updated tex, in exactly the schema shown above,
+with bullets as lists of strings and skills as a list of category and items
+objects, no fences)
 ===NOTES===
 (1 to 3 short lines on what you changed)
 ===END===
