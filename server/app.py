@@ -275,6 +275,26 @@ def setup(req: SetupRequest):
     return {"ok": True, "tracks": {k: v["name"] for k, v in tracks_cfg.items()}}
 
 
+def _resume_body(tex: str) -> str:
+    """Just the document body: the preamble is layout, not experience."""
+    i = tex.find("\\begin{document}")
+    j = tex.find("\\end{document}")
+    return tex[i + len("\\begin{document}"): j if j > -1 else None].strip() if i > -1 else tex
+
+
+def _other_tracks_text(chosen: str) -> str:
+    """Every track besides the chosen base, so Claude can combine tracks as
+    the rules allow and draw on real experience the base resume omits."""
+    parts = []
+    for key, t in (CFG.get("tracks") or {}).items():
+        if key == chosen:
+            continue
+        p = SERVER / t["resume"]
+        if p.exists():
+            parts.append(f"[track] {t['name']}\n```\n{_resume_body(p.read_text())[:9000]}\n```")
+    return "\n\n".join(parts) if parts else "(no other tracks)"
+
+
 @app.post("/tailor")
 def tailor(req: TailorRequest):
     track = CFG["tracks"].get(req.track)
@@ -291,6 +311,7 @@ def tailor(req: TailorRequest):
     prompt = TAILOR_PROMPT.format(
         rules=rules,
         github_projects=github.inventory(CFG, SERVER / "github_cache.json"),
+        other_tracks=_other_tracks_text(req.track),
         resume_tex=resume_path.read_text(),
         job_title=req.job.title or "(not captured)",
         job_company=req.job.company or "(not captured)",

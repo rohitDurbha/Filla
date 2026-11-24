@@ -35,6 +35,25 @@ def _get_text(url: str) -> str:
         return ""
 
 
+def _readme_excerpt(md: str, limit: int = 600) -> str:
+    """README text reduced to plain prose. Raw markdown headings like
+    '## Features' were indistinguishable from the prompt's own section
+    headings, and code blocks, badges and tables were mostly noise."""
+    import re
+    if not md:
+        return ""
+    md = re.sub(r"```.*?```", " ", md, flags=re.S)          # code blocks
+    md = re.sub(r"<[^>]+>", " ", md)                         # html
+    md = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", md)            # images, badges
+    md = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", md)          # links keep text
+    md = re.sub(r"^\s*\|.*\|\s*$", " ", md, flags=re.M)        # tables
+    md = re.sub(r"^\s*#+\s*", "", md, flags=re.M)             # heading marks
+    md = re.sub(r"^\s*[-*+]\s+", "", md, flags=re.M)          # bullet marks
+    md = re.sub(r"[*_`]", "", md)
+    text = re.sub(r"\s+", " ", md).strip()
+    return text[:limit].rsplit(" ", 1)[0] + ("..." if len(text) > limit else "")
+
+
 def _build(cfg: dict) -> str:
     gcfg = cfg.get("github") or {}
     user = gcfg.get("username")
@@ -46,7 +65,7 @@ def _build(cfg: dict) -> str:
 
     parts = []
     for r in repos:
-        head = f"### {r['name']}"
+        head = f"[repo] {r['name']}"
         meta = []
         if r.get("description"):
             meta.append(r["description"])
@@ -61,8 +80,9 @@ def _build(cfg: dict) -> str:
                 f"https://raw.githubusercontent.com/{user}/{r['name']}/"
                 f"{r.get('default_branch', 'main')}/README.md"
             )
-            if readme:
-                block += "\n\nREADME excerpt:\n" + readme[:1500]
+            excerpt = _readme_excerpt(readme)
+            if excerpt:
+                block += "\nREADME excerpt: " + excerpt
         parts.append(block)
 
     return "\n\n".join(parts) if parts else "(no public repositories found)"
@@ -76,7 +96,7 @@ def inventory(cfg: dict, cache_path: Path) -> str:
     if cache_path.exists():
         try:
             cached = json.loads(cache_path.read_text())
-            if time.time() - cached["fetched_at"] < max_age:
+            if cached.get("format") == 2 and time.time() - cached["fetched_at"] < max_age:
                 return cached["markdown"]
         except Exception:
             pass
@@ -84,7 +104,7 @@ def inventory(cfg: dict, cache_path: Path) -> str:
     try:
         md = _build(cfg)
         cache_path.write_text(json.dumps(
-            {"fetched_at": time.time(), "markdown": md}
+            {"fetched_at": time.time(), "markdown": md, "format": 2}
         ))
         return md
     except Exception as e:

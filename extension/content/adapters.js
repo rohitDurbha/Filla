@@ -4,7 +4,12 @@
 // text, so adapters fall back to fetching the posting page itself.
 
 const FillaAdapters = (() => {
-  const text = (sel, doc = document) => doc.querySelector(sel)?.textContent?.trim() || "";
+  // innerText keeps line breaks between blocks, textContent glued words
+  // across them ("andMachine Learning").
+  const text = (sel, doc = document) => {
+    const el = doc.querySelector(sel);
+    return el ? (el.innerText || el.textContent || "").trim() : "";
+  };
 
   function genericDescription(doc = document) {
     const main = doc.querySelector("main") || doc.body;
