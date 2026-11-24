@@ -167,6 +167,18 @@
   shadow.append(style, chip, card);
   document.documentElement.appendChild(host);
 
+  // React and Remix sites hydrate the whole document after load and throw
+  // away nodes they did not render, which made the chip flash and vanish.
+  // Put the overlay back whenever the page removes it. Re-attaching the
+  // same host keeps its shadow root, state, and any open panel intact.
+  const reattach = () => {
+    if (!fontFace.isConnected) document.documentElement.appendChild(fontFace);
+    if (!host.isConnected) document.documentElement.appendChild(host);
+  };
+  new MutationObserver(reattach).observe(document.documentElement, { childList: true, subtree: false });
+  // A swapped <html> element escapes the observer, so a slow check backs it up.
+  setInterval(reattach, 1500);
+
   // Restore the saved edge position (shared across all job sites), then the
   // per-tab open state so multi-page application flows keep the card in view.
   try {
